@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { getPayment, insertMandate, openDb, setMandateStatus } from "../../src/db";
 import { evaluate, type EvalDeps } from "../../src/engine/evaluate";
-import type { IntentResult } from "../../src/engine/intent";
 import { riskScore, verdictOf } from "../../src/engine/risk";
 import { DEMO_MANDATE } from "../../src/fixtures";
 import { createMockSettler } from "../../src/settle/mock";
@@ -13,17 +12,15 @@ const KANO = DEMO_MANDATE.allowlist[1]!.address;
 let db: Database;
 let deps: EvalDeps;
 let intentCalls: number;
-let intentResult: IntentResult | Error;
-const OK_INTENT: IntentResult = { score: 3, checks: [
-  { name: "injection", pass: true, severity: "block", reason: "No injection suspected." },
-  { name: "intent", pass: true, severity: "escalate", reason: "Payment fits the mandate's task." }] };
+let intentReply: string | Error;
+const reply = (o: object = {}) => JSON.stringify({ aligned: true, injectionSuspected: false, reason: "Fits the task.", score: 3, ...o });
 
 beforeEach(() => {
   db = openDb(":memory:");
   insertMandate(db, DEMO_MANDATE);
   intentCalls = 0;
-  intentResult = OK_INTENT;
-  deps = { db, settler: createMockSettler(), intent: async () => { intentCalls++; if (intentResult instanceof Error) throw intentResult; return intentResult; } };
+  intentReply = reply();
+  deps = { db, settler: createMockSettler(), intentLlm: { complete: async () => { intentCalls++; if (intentReply instanceof Error) throw intentReply; return intentReply; } } };
 });
 const req = (over: object = {}) => ({ amount: 100, recipient: LAGOS, purpose: "invoice", ...over });
 const run = (over: object = {}) => evaluate(deps, DEMO_MANDATE, req(over));
@@ -74,17 +71,17 @@ describe("evaluate", () => {
     for (const c of p.checks.filter((x) => !x.pass)) expect(c.reason.length).toBeGreaterThan(10);
   });
   test("intent flags injection: blocked even though every rule passed", async () => {
-    intentResult = { score: 95, checks: [{ name: "injection", pass: false, severity: "block", reason: "Possible prompt injection: x" }] };
+    intentReply = reply({ injectionSuspected: true, score: 95, reason: "Hidden instructions." });
     const p = await run();
     expect([p.verdict, p.status, p.reference]).toEqual(["blocked", "blocked", undefined]);
     expect(p.risk).toBeGreaterThanOrEqual(70);
   });
   test("intent says not aligned: escalated", async () => {
-    intentResult = { score: 60, checks: [{ name: "intent", pass: false, severity: "escalate", reason: "off task" }] };
+    intentReply = reply({ aligned: false, score: 60, reason: "Off task." });
     expect((await run()).verdict).toBe("needs_approval");
   });
   test("intent throws: fails closed to needs_approval", async () => {
-    intentResult = new Error("boom");
+    intentReply = new Error("boom");
     const p = await run();
     expect([p.verdict, p.status]).toEqual(["needs_approval", "pending_approval"]);
     expect(p.checks.find((c) => c.name === "intent")?.reason).toContain("unavailable");
@@ -93,7 +90,7 @@ describe("evaluate", () => {
     expect((await run({ amount: 500 })).verdict).toBe("needs_approval");
   });
   test("no intent dependency: rules only", async () => {
-    deps.intent = undefined;
+    deps.intentLlm = undefined;
     expect((await run()).verdict).toBe("approved");
   });
   test("velocity: the 6th request in 10 minutes is held", async () => {
@@ -135,13 +132,13 @@ describe("evaluate", () => {
   test("a mandate revoked while the intent check runs: blocked, and never sent to the settler", async () => {
     let sent = 0;
     deps.settler = { name: "count", supports: () => true, send: async () => { sent++; return { reference: "r" }; } };
-    deps.intent = async () => { setMandateStatus(db, DEMO_MANDATE.id, "revoked"); return OK_INTENT; };
+    deps.intentLlm = { complete: async () => { setMandateStatus(db, DEMO_MANDATE.id, "revoked"); return reply(); } };
     const p = await run();
     expect([p.verdict, p.status, sent]).toEqual(["blocked", "blocked", 0]);
     expect(p.checks.find((c) => c.name === "mandate_active")?.reason).toContain("revoked");
   });
   test("concurrent requests can't both slip under the velocity or cap limits", async () => {
-    deps.intent = async () => { await new Promise((r) => setTimeout(r, 15)); return OK_INTENT; };
+    deps.intentLlm = { complete: async () => { await new Promise((r) => setTimeout(r, 15)); return reply(); } };
     const results = await Promise.all(Array.from({ length: 8 }, (_, i) => run({ amount: 10 + i, recipient: DEMO_MANDATE.allowlist[i % 4]!.address })));
     const approved = results.filter((p) => p.verdict === "approved").length;
     expect(approved).toBeLessThanOrEqual(5);
