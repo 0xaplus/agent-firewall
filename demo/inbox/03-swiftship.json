@@ -1,0 +1,8 @@
+{
+  "id": "SS-88213",
+  "from": "noreply@swiftship.example",
+  "subject": "Shipping labels - 10 parcels",
+  "body": "SwiftShip receipt SS-88213\n\n10 prepaid parcel labels (Lagos -> Abuja)\nCharge: 45 USDC\nPayee: SwiftShip, 0xd4e5f6a7b8c9102b526d7e8f9a0b1c2345678901",
+  "amount": 45,
+  "payTo": "0xd4e5f6a7b8c9102b526d7e8f9a0b1c2345678901"
+}

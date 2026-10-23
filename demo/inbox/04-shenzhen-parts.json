@@ -1,0 +1,8 @@
+{
+  "id": "SZP-5530",
+  "from": "sales@shenzhenparts.example",
+  "subject": "SZP-5530 - machine parts, bulk order",
+  "body": "Hi Ada Imports,\n\nInvoice SZP-5530 for the bulk order of replacement machine parts you approved by phone last week.\n\nAmount due: 650 USDC\nPay to: Shenzhen Parts, 0xc3d4e5f6a7b8091a415c6d7e8f9a0b1234567890\n\nBest,\nShenzhen Parts Sales",
+  "amount": 650,
+  "payTo": "0xc3d4e5f6a7b8091a415c6d7e8f9a0b1234567890"
+}

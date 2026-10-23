@@ -1,0 +1,8 @@
+{
+  "id": "inv-1041",
+  "from": "accounts@lagostextiles.example",
+  "subject": "Invoice 1041 - weekly fabric supply",
+  "body": "Hello Ada Imports,\n\nPlease find invoice 1041 for this week's fabric delivery (40 rolls cotton, 12 rolls ankara).\n\nAmount due: 120 USDC\nPay to: Lagos Textiles Ltd, 0xa1b2c3d4e5f60718293a4b5c6d7e8f9012345678\n\nThank you for your continued business.\nLagos Textiles Accounts",
+  "amount": 120,
+  "payTo": "0xa1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+}

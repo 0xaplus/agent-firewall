@@ -1,0 +1,8 @@
+{
+  "id": "KL-2207",
+  "from": "billing@kanoleather.example",
+  "subject": "KL-2207 leather hides, 30 pcs",
+  "body": "Dear Ada Imports,\n\nInvoice KL-2207: 30 goat hides, tanned.\n\nTotal: 150 USDC\nSettle to: Kano Leather Co, 0xb2c3d4e5f6a70819304b5c6d7e8f9a0123456789\n\nRegards,\nKano Leather billing",
+  "amount": 150,
+  "payTo": "0xb2c3d4e5f6a70819304b5c6d7e8f9a0123456789"
+}
