@@ -59,6 +59,15 @@ Environment:
 | `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check ($0.10/M in, $0.50/M out; `openai/gpt-4.1-mini` and `google/gemini-2.5-flash` also work but cost more) |
 | `DEMO_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the demo agent |
 
+## Check the claims yourself
+
+```bash
+bun install
+bun test test/surface/promises.test.ts
+```
+
+No API key, no network, no running server. Each test name is one promise this README makes (the agent cannot change its rules, a revoked token is refused, split payments are held, the AI check can only make a verdict stricter, and so on), checked end to end on the real firewall: an MCP client talks to `/mcp` and a human talks to `/api`. The AI intent check is tested with a fake model, so results are the same on every run. `bun test` runs everything.
+
 ## What the agent can do
 
 Three MCP tools, authenticated by the agent's Bearer token (one token = one mandate; unknown token = 401):
@@ -164,6 +173,6 @@ src/settle/            index.ts (factory), mock.ts
 public/index.html      dashboard (one file, vanilla JS, polls every 2s)
 demo/                  agent.ts, openrouter.ts, inbox/*.json
 bench/                 attacks.json + run.ts
-test/                  engine/, core.contract.test.ts, surface/
+test/                  engine/, core.contract.test.ts, surface/ (promises.test.ts = the README's claims)
 test/helpers/          testCore(): the real Core on in-memory SQLite + mock settler, no network
 ```
