@@ -1,7 +1,7 @@
 import { getMandate, getMandateByToken, getPayment, insertMandate, listPayments, monthSpend, openDb, setMandateStatus } from "./db";
 import { evaluate, type EvalDeps } from "./engine/evaluate";
 import { CoreError } from "./errors";
-import { approvePayment, denyPayment } from "./payments";
+import { approvePayment, denyPayment, denyPending } from "./payments";
 import { checkIntent, DEFAULT_INTENT_MODEL, openRouterIntentLlm } from "./engine/intent";
 import { createSettler } from "./settle";
 import type { Core, Limits, Mandate, NewMandate, Stats } from "./types";
@@ -44,9 +44,11 @@ export function createCore(deps: EvalDeps): Core {
       return m;
     },
     getMandate: (id) => getMandate(db, id),
+    // Stops the agent's token at once and denies everything still waiting for a human.
     revokeMandate(id) {
       needMandate(id);
       setMandateStatus(db, id, "revoked");
+      denyPending(deps, id, "Mandate was revoked before a human decided.");
       return needMandate(id);
     },
 

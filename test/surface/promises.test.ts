@@ -152,13 +152,14 @@ describe("revoking a mandate", () => {
     expect(res.status).toBe(401);
   });
 
-  test("a held payment cannot be paid after the mandate is revoked, even if a human approves it", async () => {
-    const p = await (await agent()).pay(500, LAGOS);
+  test("revoking a mandate denies everything still waiting for a human, and nothing is paid", async () => {
+    const a = await agent();
+    const p = await a.pay(500, LAGOS);
     await human("POST", `/api/mandates/${DEMO_MANDATE.id}/revoke`);
-    const res = await human("POST", `/api/payments/${p.paymentId}/approve`);
-    const after = await res.json() as any;
-    expect(after.status).toBe("denied");
-    expect(after.reference).toBeUndefined();
+    const log = await (await human("GET", `/api/payments?mandateId=${DEMO_MANDATE.id}`)).json() as any[];
+    expect(log.map((x) => [x.id, x.status])).toEqual([[p.paymentId, "denied"]]);
+    expect((await human("POST", `/api/payments/${p.paymentId}/approve`)).status).toBe(409);
+    expect(log[0].reference).toBeUndefined();
   });
 });
 
