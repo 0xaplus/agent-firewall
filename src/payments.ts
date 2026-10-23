@@ -1,0 +1,103 @@
+// Payment lifecycle: the only module that changes a payment's status.
+// Every move goes through `move`, which follows MOVES and is atomic in the database.
+import type { Database } from "bun:sqlite";
+import { getMandate, getPayment, insertPayment, listPayments, movePayment, type PaymentPatch } from "./db";
+import { verdictOf } from "./engine/risk";
+import { CoreError } from "./errors";
+import type { Check, Mandate, Payment, PaymentRequest, PaymentStatus, Settler } from "./types";
+
+export interface PaymentDeps {
+  db: Database;
+  settler: Settler;
+  now?: () => Date;
+}
+
+// Every status change a stored payment may make. A new payment starts as
+// blocked, pending_approval or settling, depending on its verdict.
+export const MOVES: Record<PaymentStatus, readonly PaymentStatus[]> = {
+  pending_approval: ["settling", "denied"],
+  settling: ["settled", "failed"],
+  settled: [],
+  blocked: [],
+  denied: [],
+  failed: [],
+};
+
+const newId = () => `pay_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+const words = (s: PaymentStatus) => s.replaceAll("_", " ");
+
+function need(db: Database, id: string): Payment {
+  const p = getPayment(db, id);
+  if (!p) throw new CoreError("not_found", `Payment ${id} not found`);
+  return p;
+}
+
+function needPending(db: Database, id: string): Payment {
+  const p = need(db, id);
+  if (p.status !== "pending_approval") throw new CoreError("wrong_state", `Payment ${id} is ${words(p.status)}, not pending approval`);
+  return p;
+}
+
+function move(db: Database, p: Payment, to: PaymentStatus, patch: PaymentPatch = {}): Payment {
+  if (!MOVES[p.status].includes(to)) throw new CoreError("wrong_state", `Payment ${p.id} cannot go from ${words(p.status)} to ${words(to)}`);
+  // Someone else moved it first (a double-click, a revoke): refuse rather than overwrite.
+  if (!movePayment(db, p.id, p.status, to, patch)) throw new CoreError("wrong_state", `Payment ${p.id} is no longer ${words(p.status)}`);
+  return getPayment(db, p.id)!;
+}
+
+const withCheck = (p: Payment, check: Check): PaymentPatch => ({ checks: [...p.checks, check] });
+const denial = (reason: string): Check => ({ name: "mandate_active", pass: false, severity: "block", reason });
+
+// Settling → settled, or failed with the reason. Settler errors never escape.
+async function settle(deps: PaymentDeps, p: Payment): Promise<Payment> {
+  const fail = (reason: string) => move(deps.db, p, "failed", withCheck(p, { name: "settlement", pass: false, severity: "info", reason }));
+  if (!deps.settler.supports(p.currency)) return fail(`The ${deps.settler.name} settler does not support ${p.currency}.`);
+  let sent: { reference: string; receiptUrl?: string };
+  try {
+    sent = await deps.settler.send({ paymentId: p.id, amount: p.amount, currency: p.currency, recipient: p.recipient });
+  } catch (err) {
+    return fail(`Settlement failed: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`);
+  }
+  return move(deps.db, p, "settled", { reference: sent.reference, ...(sent.receiptUrl ? { receiptUrl: sent.receiptUrl } : {}) });
+}
+
+// Stores a judged request. The verdict sets the first status; an approved payment settles at once.
+export async function openPayment(deps: PaymentDeps, mandate: Mandate, req: PaymentRequest, checks: Check[], risk: number): Promise<Payment> {
+  const verdict = verdictOf(checks);
+  const payment: Payment = {
+    ...req,
+    id: newId(),
+    currency: mandate.currency,
+    mandateId: mandate.id,
+    verdict,
+    status: verdict === "blocked" ? "blocked" : verdict === "needs_approval" ? "pending_approval" : "settling",
+    risk,
+    checks,
+    createdAt: (deps.now ?? (() => new Date()))().toISOString(),
+  };
+  insertPayment(deps.db, payment);
+  return verdict === "approved" ? settle(deps, payment) : payment;
+}
+
+// A human approves a held payment: it settles. Throws not_found or wrong_state.
+export async function approvePayment(deps: PaymentDeps, id: string): Promise<Payment> {
+  const p = needPending(deps.db, id);
+  // Revoking denies held payments, but a request that passed its checks just before
+  // the revoke can still land afterwards. A revoked mandate never moves money.
+  if (getMandate(deps.db, p.mandateId)?.status !== "active") {
+    return move(deps.db, p, "denied", withCheck(p, denial("Mandate was revoked before this was approved.")));
+  }
+  return settle(deps, move(deps.db, p, "settling"));
+}
+
+// A human denies a held payment. Throws not_found or wrong_state.
+export function denyPayment(deps: PaymentDeps, id: string): Payment {
+  return move(deps.db, needPending(deps.db, id), "denied");
+}
+
+// Denies every held payment of a mandate, adding the reason. Returns how many.
+export function denyPending(deps: PaymentDeps, mandateId: string, reason: string): number {
+  const held = listPayments(deps.db, mandateId).filter((p) => p.status === "pending_approval");
+  for (const p of held) move(deps.db, p, "denied", withCheck(p, denial(reason)));
+  return held.length;
+}

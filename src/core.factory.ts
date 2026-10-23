@@ -1,8 +1,7 @@
-import {
-  getMandate, getMandateByToken, getPayment, insertMandate, listPayments, monthSpend, openDb, setMandateStatus,
-  transitionPayment, updatePayment,
-} from "./db";
-import { evaluate, settlePayment, type EvalDeps } from "./engine/evaluate";
+import { getMandate, getMandateByToken, getPayment, insertMandate, listPayments, monthSpend, openDb, setMandateStatus } from "./db";
+import { evaluate, type EvalDeps } from "./engine/evaluate";
+import { CoreError } from "./errors";
+import { approvePayment, denyPayment } from "./payments";
 import { checkIntent, DEFAULT_INTENT_MODEL, openRouterIntentLlm } from "./engine/intent";
 import { createSettler } from "./settle";
 import type { Core, Limits, Mandate, NewMandate, Stats } from "./types";
@@ -13,7 +12,7 @@ export function createCore(deps: EvalDeps): Core {
   const { db } = deps;
   const needMandate = (id: string): Mandate => {
     const m = getMandate(db, id);
-    if (!m) throw new Error(`Mandate ${id} not found`);
+    if (!m) throw new CoreError("not_found", `Mandate ${id} not found`);
     return m;
   };
 
@@ -53,25 +52,8 @@ export function createCore(deps: EvalDeps): Core {
 
     listPayments: (mandateId) => listPayments(db, mandateId),
 
-    async approvePayment(id) {
-      const p = getPayment(db, id);
-      if (!p) throw new Error(`Payment ${id} not found`);
-      if (p.status !== "pending_approval") throw new Error(`Payment ${id} is ${p.status}, not pending approval`);
-      // A revoked mandate must not move money, even on a human's click.
-      if (needMandate(p.mandateId).status !== "active") {
-        const reason = { name: "mandate_active", pass: false, severity: "block" as const, reason: "Mandate was revoked before this was approved." };
-        if (transitionPayment(db, id, "pending_approval", "denied")) updatePayment(db, id, { checks: [...p.checks, reason] });
-        return getPayment(db, id)!;
-      }
-      if (!transitionPayment(db, id, "pending_approval", "settling")) throw new Error(`Payment ${id} is no longer pending approval`);
-      return settlePayment(deps, id);
-    },
-    denyPayment(id) {
-      const p = getPayment(db, id);
-      if (!p) throw new Error(`Payment ${id} not found`);
-      if (!transitionPayment(db, id, "pending_approval", "denied")) throw new Error(`Payment ${id} is ${p.status}, not pending approval`);
-      return getPayment(db, id)!;
-    },
+    approvePayment: (id) => approvePayment(deps, id),
+    denyPayment: (id) => denyPayment(deps, id),
 
     stats(mandateId): Stats {
       const all = listPayments(db, mandateId);

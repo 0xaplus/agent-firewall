@@ -1,18 +1,13 @@
-import type { Database } from "bun:sqlite";
-import { getPayment, historyTo, insertPayment, monthSpend, recentPayments, updatePayment } from "../db";
-import type { Check, Mandate, Payment, PaymentRequest, Settler } from "../types";
+import { historyTo, monthSpend, recentPayments } from "../db";
+import { openPayment, type PaymentDeps } from "../payments";
+import type { Check, Mandate, Payment, PaymentRequest } from "../types";
 import type { IntentInput, IntentResult } from "./intent";
 import { riskScore, verdictOf } from "./risk";
 import { runRules, WINDOW_MINUTES, type RuleCtx } from "./rules";
 
-export interface EvalDeps {
-  db: Database;
-  settler: Settler;
+export interface EvalDeps extends PaymentDeps {
   intent?: (input: IntentInput) => Promise<IntentResult>; // skipped when absent
-  now?: () => Date;
 }
-
-const newId = () => `pay_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
 function ctxFor(deps: EvalDeps, mandate: Mandate, req: PaymentRequest): RuleCtx {
   const now = (deps.now ?? (() => new Date()))();
@@ -26,7 +21,7 @@ function ctxFor(deps: EvalDeps, mandate: Mandate, req: PaymentRequest): RuleCtx 
 
 const blockedBy = (checks: Check[]) => verdictOf(checks) === "blocked";
 
-// Rules → intent (only if nothing blocked yet) → verdict → persist → settle if approved.
+// Rules → intent (only if nothing blocked yet) → stored by the payment lifecycle, which settles it if approved.
 export async function evaluate(deps: EvalDeps, mandate: Mandate, req: PaymentRequest): Promise<Payment> {
   let checks = runRules(ctxFor(deps, mandate, req));
   let intentScore: number | null = null;
@@ -47,38 +42,5 @@ export async function evaluate(deps: EvalDeps, mandate: Mandate, req: PaymentReq
     intentScore = intent.score;
   }
 
-  const verdict = verdictOf(checks);
-  const payment: Payment = {
-    ...req,
-    id: newId(),
-    currency: mandate.currency,
-    mandateId: mandate.id,
-    verdict,
-    status: verdict === "blocked" ? "blocked" : verdict === "needs_approval" ? "pending_approval" : "settling",
-    risk: riskScore(checks, intentScore),
-    checks,
-    createdAt: (deps.now ?? (() => new Date()))().toISOString(),
-  };
-  insertPayment(deps.db, payment);
-  return verdict === "approved" ? settlePayment(deps, payment.id) : payment;
-}
-
-const failWith = (deps: EvalDeps, p: Payment, reason: string): Payment => {
-  const check: Check = { name: "settlement", pass: false, severity: "info", reason };
-  updatePayment(deps.db, p.id, { status: "failed", checks: [...p.checks, check] });
-  return getPayment(deps.db, p.id)!;
-};
-
-// Payment must already be in `settling`. Settler errors become status `failed` with the reason.
-export async function settlePayment(deps: EvalDeps, id: string): Promise<Payment> {
-  const p = getPayment(deps.db, id);
-  if (!p) throw new Error(`Payment ${id} not found`);
-  if (!deps.settler.supports(p.currency)) return failWith(deps, p, `The ${deps.settler.name} settler does not support ${p.currency}.`);
-  try {
-    const r = await deps.settler.send({ paymentId: p.id, amount: p.amount, currency: p.currency, recipient: p.recipient });
-    updatePayment(deps.db, p.id, { status: "settled", reference: r.reference, ...(r.receiptUrl ? { receiptUrl: r.receiptUrl } : {}) });
-    return getPayment(deps.db, p.id)!;
-  } catch (err) {
-    return failWith(deps, p, `Settlement failed: ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`);
-  }
+  return openPayment(deps, mandate, req, checks, riskScore(checks, intentScore));
 }

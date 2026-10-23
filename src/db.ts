@@ -93,22 +93,17 @@ export function getPayment(db: Database, id: string): Payment | null {
   return r ? toPayment(r) : null;
 }
 
-export type PaymentPatch = Partial<Pick<Payment, "status" | "reference" | "receiptUrl" | "checks">>;
+export type PaymentPatch = Partial<Pick<Payment, "reference" | "receiptUrl" | "checks">>;
 
-export function updatePayment(db: Database, id: string, patch: PaymentPatch): void {
-  const sets: string[] = [];
-  const vals: (string | null)[] = [];
-  if (patch.status !== undefined) { sets.push("status = ?"); vals.push(patch.status); }
+// Atomic status change, with optional field updates: applies only if the payment is still in `from`.
+// Stops double approvals. Only src/payments.ts should call this.
+export function movePayment(db: Database, id: string, from: PaymentStatus, to: PaymentStatus, patch: PaymentPatch = {}): boolean {
+  const sets = ["status = ?"];
+  const vals: (string | null)[] = [to];
   if (patch.reference !== undefined) { sets.push("reference = ?"); vals.push(patch.reference); }
   if (patch.receiptUrl !== undefined) { sets.push("receipt_url = ?"); vals.push(patch.receiptUrl); }
   if (patch.checks !== undefined) { sets.push("checks = ?"); vals.push(JSON.stringify(patch.checks as Check[])); }
-  if (!sets.length) return;
-  db.query(`UPDATE payments SET ${sets.join(", ")} WHERE id = ?`).run(...vals, id);
-}
-
-// Atomic status change: true only if the payment was in `from`. Stops double approvals.
-export function transitionPayment(db: Database, id: string, from: PaymentStatus, to: PaymentStatus): boolean {
-  return db.query("UPDATE payments SET status = ? WHERE id = ? AND status = ?").run(to, id, from).changes === 1;
+  return db.query(`UPDATE payments SET ${sets.join(", ")} WHERE id = ? AND status = ?`).run(...vals, id, from).changes === 1;
 }
 
 // Newest first.
