@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { handleApi } from "../../src/api";
-import { createFakeCore } from "../../src/core.fake";
+import { testCore } from "../helpers/testCore";
 import { DEMO_MANDATE } from "../../src/fixtures";
 import type { Core } from "../../src/types";
 
@@ -9,7 +9,7 @@ const { id: _i, agentToken: _t, status: _s, ...NEW_MANDATE } = DEMO_MANDATE;
 
 let core: Core;
 let saved: string | undefined;
-beforeEach(() => { core = createFakeCore(); saved = process.env.ADMIN_TOKEN; process.env.ADMIN_TOKEN = "test"; });
+beforeEach(() => { core = testCore(); saved = process.env.ADMIN_TOKEN; process.env.ADMIN_TOKEN = "test"; });
 afterEach(() => { if (saved === undefined) delete process.env.ADMIN_TOKEN; else process.env.ADMIN_TOKEN = saved; });
 
 const call = (method: string, path: string, body?: unknown, token: string | null = "test") =>
