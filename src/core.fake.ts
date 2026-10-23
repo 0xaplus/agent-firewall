@@ -12,7 +12,6 @@ import type {
 
 const rand = (n = 8) => crypto.randomUUID().replaceAll("-", "").slice(0, n);
 
-// In-memory Core with canned verdicts, so Part B can be built and demoed without Part A.
 export function createFakeCore(): Core {
   const mandates = new Map<string, Mandate>();
   const payments = new Map<string, Payment>(); // insertion order = oldest first
