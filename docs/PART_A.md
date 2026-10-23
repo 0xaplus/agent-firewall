@@ -16,9 +16,9 @@ Branch `part-a`. You build everything behind the `Core` interface: storage, poli
 | ID | Task | Done when |
 |---|---|---|
 | A1 | `db.ts`: `bun:sqlite` schema for mandates and payments (allowlist and checks as JSON columns). Helpers: insert/get/update/list payments, `monthSpend(mandateId)`, `recentPayments(mandateId, minutes)`, `historyTo(mandateId, recipient)` | A test on a temp DB round-trips a `Payment` |
-| A2 | `engine/rules.ts`: R1–R8 from docs/PLAN.md as pure functions `(ctx) => Check`, where `ctx = { mandate, req, monthSpend, recent, history, now }` | Each rule has one passing and one failing test |
+| A2 | `engine/rules.ts`: R0–R8 from docs/PLAN.md as pure functions `(ctx) => Check`, where `ctx = { mandate, req, monthSpend, recent, history, now }` | Each rule has one passing and one failing test |
 | A3 | `engine/risk.ts` + `engine/evaluate.ts`: rules → intent (skipped if already blocked) → verdict + risk score | Clean / over-threshold / poisoned requests give approved / needs_approval / blocked |
-| A4 | `settle/mock.ts`, `settle/payfrom.ts`, `settle/index.ts` (factory on `SETTLER` env) | Mock returns a fake hash; Payfrom sends a small real USDC transfer; same `paymentId` twice = one transfer |
+| A4 | `settle/mock.ts` (supports any currency), `settle/payfrom.ts` (USDC), `settle/index.ts` (factory on `SETTLER` env). Each implements `Settler` incl. `name` and `supports(currency)` | Mock returns a fake reference; Payfrom (USDC) sends a small real transfer; same `paymentId` twice = one transfer |
 | A5 | `core.ts`: implement every `Core` method on A1–A4. `seed.ts` inserts `DEMO_MANDATE` from fixtures | `bun run seed` works; `requestPayment` settles approved payments |
 | A6 | `test/core.contract.test.ts`: calls every `Core` method with the mock settler and a fake LLM | Green = ready to merge |
 | A7 | `engine/intent.ts`: `checkIntent(llm, input) => Check[]`, model `claude-haiku-5-5`, 5s timeout, JSON output, client injected | Fake-LLM tests: aligned → pass, injection → block, timeout/error → escalate |

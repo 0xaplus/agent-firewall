@@ -13,7 +13,7 @@ The shared contract lives in `src/types.ts` (the `Core` interface) and `src/fixt
 - **LLM:** `@anthropic-ai/sdk`, model `claude-haiku-5-5` (fast, cheap) for the intent check
 - **Validation:** `zod`
 - **Dashboard:** one `public/index.html`, vanilla JS, polls `/api` every 2s
-- **Settlement:** Payfrom API (USDC) behind a `Settler` interface; `mock` adapter by default
+- **Settlement:** pluggable rails behind a `Settler` interface. `mock` by default; `payfrom` (USDC) is the demo rail. Stripe, bank transfer, x402 etc. are future adapters.
 
 ## Architecture
 
@@ -36,11 +36,12 @@ Agent (Claude Code / Claude Desktop / demo agent / any MCP client)
 Human → dashboard (Telegram = stretch) → approve / deny → settle
 ```
 
-**Three non-negotiable design rules:**
+**Four non-negotiable design rules:**
 
 1. **The agent can never change its own rules.** MCP exposes no mandate-editing tool. Mandates are edited only via the dashboard/API with the admin token.
 2. **The LLM can only make things stricter.** It can escalate or block; it can never approve something the deterministic rules blocked.
 3. **Fail closed.** LLM timeout or error → `needs_approval`, never `approved`.
+4. **Currency- and rail-agnostic.** One mandate = one currency; all limits are in it and the engine never does FX. Money moves only through a `Settler`, so new rails plug in without touching the engine.
 
 ## Repo layout
 
@@ -70,7 +71,7 @@ spend-firewall/
   test/surface/          [B]
 ```
 
-**Env:** `PORT=3000`, `ADMIN_TOKEN`, `ANTHROPIC_API_KEY`, `SETTLER=mock|payfrom`, `PAYFROM_API_KEY`, `PAYFROM_BASE_URL`.
+**Env:** `PORT=3000`, `ADMIN_TOKEN`, `ANTHROPIC_API_KEY`, `SETTLER=mock|payfrom`, `PAYFROM_API_KEY`, `PAYFROM_BASE_URL`. Settler is chosen by `SETTLER`; each settler declares which currencies it supports.
 
 **SQLite:** `mandates` (columns mirror `Mandate`, `allowlist` as JSON) and `payments` (columns mirror `Payment`, `checks` as JSON). That's it.
 
@@ -80,6 +81,7 @@ spend-firewall/
 
 | ID | Check | Fails → |
 |---|---|---|
+| R0 | Request currency (if given) equals mandate currency | block |
 | R1 | Mandate active and not expired | block |
 | R2 | Recipient on allowlist | block |
 | R3 | Amount ≤ hardMax | block |
@@ -98,7 +100,7 @@ spend-firewall/
 
 **Verdict** (`risk.ts`): any `block` → `blocked`; else any `escalate` → `needs_approval`; else `approved`. Risk score = 50 per failed block check + 20 per failed escalate check, blended with LLM score, capped at 100. The score is for display only; severities decide.
 
-**Order in evaluate.ts:** run R1–R8 → if not already blocked, run intent → verdict → insert payment row → if approved, settle immediately → return.
+**Order in evaluate.ts:** run R0–R8 → if not already blocked, run intent → verdict → insert payment row → if approved, settle immediately → return.
 
 ## Interfaces
 
@@ -106,8 +108,8 @@ spend-firewall/
 
 | Tool | Input | Returns |
 |---|---|---|
-| `request_payment` | `amount, recipient, purpose, context?` | verdict, reasons, `paymentId`, `txHash` if settled |
-| `get_payment_status` | `paymentId` | status, txHash |
+| `request_payment` | `amount, recipient, purpose, currency?, context?` | verdict, reasons, `paymentId`, `reference` if settled |
+| `get_payment_status` | `paymentId` | status, reference |
 | `get_spending_limits` | — | remaining monthly budget, autoApproveMax, allowlist labels |
 
 Auth: the Bearer `agt_` token maps to exactly one mandate (`core.mandateForToken`). Unknown token → 401.
@@ -117,7 +119,7 @@ Auth: the Bearer `agt_` token maps to exactly one mandate (`core.mandateForToken
 - `POST /api/mandates`, `GET /api/mandates/:id`, `POST /api/mandates/:id/revoke`
 - `GET /api/payments?mandateId=`
 - `POST /api/payments/:id/approve` → settle; `POST /api/payments/:id/deny`
-- `GET /api/stats` → counts by verdict, USDC settled, USDC blocked
+- `GET /api/stats` → counts by verdict, amount settled, amount blocked (in mandate currency)
 
 ## Two parts, built in parallel
 
