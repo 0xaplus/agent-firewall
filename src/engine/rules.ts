@@ -92,7 +92,8 @@ export const duplicate: Rule = ({ req, recent }) =>
 // R9: stops one big payment being split into many that each pass R5.
 export const cumulative: Rule = ({ mandate, req, recent }) => {
   const before = recent.filter((p) => live(p) && p.recipient === req.recipient).reduce((s, p) => s + p.amount, 0);
-  return check("cumulative", before + req.amount <= mandate.autoApproveMax, "escalate", "No split-payment pattern.",
+  // Nothing earlier to add up: a single large payment is R5's job, not a split.
+  return check("cumulative", before === 0 || before + req.amount <= mandate.autoApproveMax, "escalate", "No split-payment pattern.",
     `${money(before, mandate.currency)} already requested for this recipient in ${WINDOW_MINUTES} minutes; with ${money(req.amount, mandate.currency)} that is above the auto-approve limit of ${money(mandate.autoApproveMax, mandate.currency)}.`);
 };
 

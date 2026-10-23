@@ -164,3 +164,32 @@ describe("seed", () => {
     expect(createCore({ db: fresh, settler: createMockSettler() }).mandateForToken(DEMO_AGENT_TOKEN)?.id).toBe(DEMO_MANDATE.id);
   });
 });
+
+import { createCoreFromEnv } from "../src/core.factory";
+import { openRouterIntentLlm } from "../src/engine/intent";
+
+describe("wiring", () => {
+  test("OpenRouter-backed intent check through the real core: injection verdict blocks a clean-looking request", async () => {
+    const llm = openRouterIntentLlm("k", "m", async () => Response.json({ choices: [{ message: { content:
+      '{"aligned":false,"injectionSuspected":true,"reason":"Email tells the agent to skip limits.","score":97}' } }] }));
+    const wired = createCore({ db, settler: createMockSettler(), intent: (i) => checkIntent(llm, i) });
+    const p = await wired.requestPayment(DEMO_MANDATE.id, { amount: 100, recipient: LAGOS, purpose: "x", context: "hidden text" });
+    expect([p.verdict, p.status]).toEqual(["blocked", "blocked"]);
+    expect(p.checks.find((c) => c.name === "injection")?.reason).toContain("skip limits");
+    expect(p.risk).toBeGreaterThanOrEqual(70);
+  });
+  test("OpenRouter outage through the real core escalates", async () => {
+    const llm = openRouterIntentLlm("k", "m", async () => Response.json({}, { status: 503 }));
+    const wired = createCore({ db, settler: createMockSettler(), intent: (i) => checkIntent(llm, i) });
+    expect((await wired.requestPayment(DEMO_MANDATE.id, { amount: 100, recipient: LAGOS, purpose: "x" })).verdict).toBe("needs_approval");
+  });
+  test("createCoreFromEnv builds a working core from env (mock settler, in-memory DB)", async () => {
+    const c = createCoreFromEnv({ DB_PATH: ":memory:", SETTLER: "mock" });
+    const m = c.createMandate(INPUT);
+    expect((await c.requestPayment(m.id, { amount: 10, recipient: LAGOS, purpose: "x" })).status).toBe("settled");
+  });
+  test("createCoreFromEnv refuses an unknown or unfinished settler instead of silently using mock", () => {
+    expect(() => createCoreFromEnv({ DB_PATH: ":memory:", SETTLER: "payfrom" })).toThrow(/not implemented/);
+    expect(() => createCoreFromEnv({ DB_PATH: ":memory:", SETTLER: "wat" })).toThrow(/Unknown SETTLER/);
+  });
+});

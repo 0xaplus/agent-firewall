@@ -122,6 +122,8 @@ describe("R8 duplicate", () => {
 describe("R9 cumulative to one recipient", () => {
   test("passes when the running total stays under the auto-approve limit", () =>
     expect(cumulative(ctx({ req: { amount: 100 }, recent: [past({ amount: 100 })] })).pass).toBe(true));
+  test("a lone large payment is not a split (R5 covers it)", () =>
+    expect(cumulative(ctx({ req: { amount: 650 } })).pass).toBe(true));
   test("ignores other recipients and blocked requests", () =>
     expect(cumulative(ctx({ req: { amount: 150 }, recent: [past({ amount: 150, recipient: "other" }), past({ amount: 150, verdict: "blocked", status: "blocked" })] })).pass).toBe(true));
   test("escalates a split payment", () => {

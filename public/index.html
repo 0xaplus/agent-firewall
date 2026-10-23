@@ -168,11 +168,11 @@ function who(address) {
 }
 const failed = (p) => p.checks.filter((c) => !c.pass).map((c) => c.reason);
 
-function renderCounters(s) {
+function renderCounters(s, payments) {
   $("c-settled").textContent = money(s.settledAmount, currency);
   $("c-blocked").textContent = money(s.blockedAmount, currency);
   $("n-approved").textContent = s.approved;
-  $("n-pending").textContent = s.needsApproval;
+  $("n-pending").textContent = payments.filter((p) => p.status === "pending_approval").length;
   $("n-blocked").textContent = s.blocked;
 }
 
@@ -264,7 +264,7 @@ async function refresh() {
     mandate = m; currency = m.currency; lastPayments = payments;
     $("login").classList.remove("show");
     showError("");
-    renderCounters(stats); renderMandate(m, stats); renderPending(payments); renderFeed(payments);
+    renderCounters(stats, payments); renderMandate(m, stats); renderPending(payments); renderFeed(payments);
     setLive(true, `live · updated ${new Date().toLocaleTimeString()}`);
   } catch (e) {
     if (e.status === 401) { token = ""; $("login").classList.add("show"); showError("Admin token rejected. Enter it again."); setLive(false, "not connected"); }

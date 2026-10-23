@@ -70,7 +70,7 @@ describe("evaluate", () => {
   });
   test("every block reason is plain and specific", async () => {
     const p = await run({ amount: 5000, currency: "EUR", recipient: "0xevil" });
-    expect(failedNames(p).sort()).toEqual(["allowlist", "auto_approve", "cumulative", "currency", "hard_max", "monthly_cap"].sort());
+    expect(failedNames(p).sort()).toEqual(["allowlist", "auto_approve", "currency", "hard_max", "monthly_cap"].sort());
     for (const c of p.checks.filter((x) => !x.pass)) expect(c.reason.length).toBeGreaterThan(10);
   });
   test("intent flags injection: blocked even though every rule passed", async () => {

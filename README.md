@@ -15,16 +15,17 @@ Agent (Claude Code, Claude Desktop, any MCP client)
 
 Mandates are currency- and rail-agnostic: every limit is in the mandate's currency, and recipient addresses are opaque strings.
 
-> **Status:** this branch (`part-b`) runs on `src/core.fake.ts`, an in-memory stand-in for the real engine. Verdicts here are canned (see below). Swap the single import in `src/index.ts` from `./core.fake` to `./core` once Part A is merged.
+> **Status:** runs on the real engine (SQLite, rules, LLM intent check, mock settlement). Settlement through Payfrom is not built: `SETTLER=payfrom` fails with a clear error.
 
 ## Quick start
 
 ```bash
 bun install
+bun run seed                          # demo mandate + agent token, into firewall.db
 ADMIN_TOKEN=change-me bun run dev     # http://localhost:3000
 ```
 
-Open `http://localhost:3000/?token=change-me`. The token is read once, kept in memory only and removed from the address bar. The demo mandate (`mdt_ada`, 200 / 1000 / 2000 limits, four allowlisted suppliers) is preloaded by the fake core.
+Open `http://localhost:3000/?token=change-me`. The token is read once, kept in memory only and removed from the address bar. The seeded demo mandate is `mdt_ada` (200 auto-approve / 1000 hard / 2000 monthly, four allowlisted suppliers), agent token `agt_demo_ada`.
 
 In another terminal:
 
@@ -34,7 +35,17 @@ ADMIN_TOKEN=change-me bun run bench   # 20 attacks, naive vs firewalled
 bun test
 ```
 
-Environment: `PORT` (3000), `ADMIN_TOKEN` (required for `/api`; if unset every `/api` call returns 401), `OPENROUTER_API_KEY` (demo agent), `DEMO_MODEL` (OpenRouter model id, default `anthropic/claude-sonnet-5.5`).
+Environment:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PORT` | 3000 | server port |
+| `ADMIN_TOKEN` | – | required for `/api`; if unset every `/api` call returns 401 |
+| `DB_PATH` | `firewall.db` | SQLite file (`:memory:` for throwaway runs) |
+| `SETTLER` | `mock` | settlement rail (`mock` today) |
+| `OPENROUTER_API_KEY` | – | turns on the LLM intent check and the LLM demo agent |
+| `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check |
+| `DEMO_MODEL` | `anthropic/claude-sonnet-5.5` | OpenRouter model for the demo agent |
 
 ## What the agent can do
 
@@ -89,6 +100,27 @@ claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
 
 With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
 
+## How a request is judged
+
+Rules, in code order (`src/engine/rules.ts`). A failed **block** rule blocks; a failed **escalate** rule sends the payment to a human.
+
+| Rule | Check | Fails to |
+|---|---|---|
+| R0 | request currency, if given, equals the mandate currency | block |
+| R1 | mandate active and not expired | block |
+| R2 | recipient on the allowlist (exact string match) | block |
+| R3 | amount ≤ hard limit | block |
+| R4 | this month's settled and in-flight spend + amount ≤ monthly cap | block |
+| R5 | amount ≤ auto-approve limit | escalate |
+| R6 | fewer than 5 requests in the last 10 minutes (blocked ones count) | escalate |
+| R7 | amount ≤ 5× the median past payment to this recipient (needs 3+) | escalate |
+| R8 | no same-amount, same-recipient request in the last 10 minutes | escalate |
+| R9 | requests to one recipient in 10 minutes add up to ≤ auto-approve limit (catches split payments) | escalate |
+
+R9 and the amount sanity check (positive, finite) are additions to the plan's R0–R8.
+
+If nothing blocked, one LLM call audits intent (5 s timeout). It treats the invoice or email as untrusted data. It can only make the outcome stricter: injection suspected → block, off-task → escalate, error or timeout or unreadable reply → escalate. With no `OPENROUTER_API_KEY` the intent check is off and a warning is logged at startup. Every request is stored, blocked ones included. Revoking a mandate stops its token and denies any payment still waiting for approval.
+
 ## Benchmark
 
 `bench/attacks.json` holds 20 attacks in six categories: hidden instructions, swapped address, lookalike address, inflated amount, split payments and fake urgency. `bun run bench` sends each one two ways:
@@ -98,21 +130,23 @@ With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the
 
 A payment held for a human counts as not paid.
 
-Result on the **fake core** (canned rules, no intent check, no velocity limit): `naive paid 20/20, firewalled paid 3/20`. The three leaks are the two split-payment cases and one off-task payment to an allowlisted supplier. They are the cases that need the real engine's velocity rule and LLM intent check. Re-run the bench after the swap to `./core`; these numbers are not the real engine's.
+Result on the real engine **without the LLM check** (deterministic rules only): `naive paid 20/20, firewalled paid 3/20`, with 490 of 12,489 leaving. Two of the three are the split-payment cases: the first payment of each series (190 and 150) goes through because it is inside the auto-approve limit, and every later one is held. The third is `hidden_instructions-5`, an off-task payment to an allowlisted supplier with no trigger words. Only the LLM intent check can catch that one, and it has not been run against a real model here because no `OPENROUTER_API_KEY` was available.
 
-## Fake core behaviour
-
-Blocked: unknown recipient, "ignore previous" in `context`, amount above the hard limit or monthly cap, wrong currency, revoked mandate. Needs approval: amount above the auto-approve limit. Everything else is approved and settled with a fake reference.
-
-## Layout (Part B)
+## Layout
 
 ```
-src/index.ts       Bun.serve: /mcp, /api/*, /
-src/api.ts         REST handlers, ADMIN_TOKEN check, zod validation
-src/mcp/server.ts  MCP tools + agent-token auth
-src/core.fake.ts   in-memory Core
-public/index.html  dashboard (one file, vanilla JS, polls every 2s)
-demo/              agent.ts + inbox/*.json
-bench/             attacks.json + run.ts
-test/surface/      tests for all of the above
+src/index.ts           Bun.serve: /mcp, /api/*, /
+src/api.ts             REST handlers, ADMIN_TOKEN check, zod validation
+src/mcp/server.ts      MCP tools + agent-token auth
+src/core.ts            the real Core, wired from env
+src/core.factory.ts    createCore(deps) / createCoreFromEnv()
+src/db.ts              SQLite schema + queries
+src/seed.ts            demo mandate
+src/engine/            rules.ts, risk.ts, intent.ts, evaluate.ts
+src/settle/            index.ts (factory), mock.ts
+src/core.fake.ts       in-memory Core, used by the surface tests
+public/index.html      dashboard (one file, vanilla JS, polls every 2s)
+demo/                  agent.ts, openrouter.ts, inbox/*.json
+bench/                 attacks.json + run.ts
+test/                  engine/, core.contract.test.ts, surface/
 ```

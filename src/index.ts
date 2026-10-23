@@ -1,4 +1,4 @@
-import { core } from "./core.fake"; // swap to "./core" at integration
+import { core } from "./core";
 import { handleApi } from "./api";
 import { handleMcp } from "./mcp/server";
 
