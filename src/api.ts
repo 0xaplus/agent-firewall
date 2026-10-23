@@ -1,0 +1,99 @@
+import { z } from "zod";
+import type { Core } from "./types";
+
+const nonEmpty = z.string().trim().min(1);
+const amount = z.number().finite().nonnegative();
+
+// Addresses are opaque strings (wallet, IBAN, account number): no format checks here.
+const NewMandateBody = z.object({
+  name: nonEmpty,
+  task: nonEmpty,
+  currency: nonEmpty,
+  autoApproveMax: amount,
+  hardMax: amount,
+  monthlyCap: amount,
+  allowlist: z.array(z.object({
+    address: nonEmpty, label: nonEmpty, category: nonEmpty, rail: nonEmpty.optional(),
+  })),
+  expiresAt: z.string().nullable(),
+});
+
+const json = (body: unknown, status = 200) => Response.json(body, { status });
+const fail = (status: number, error: string) => json({ error }, status);
+
+function authorized(req: Request): boolean {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token) return false; // fail closed
+  return req.headers.get("authorization") === `Bearer ${token}`;
+}
+
+export async function handleApi(req: Request, core: Core): Promise<Response> {
+  if (!authorized(req)) return fail(401, "Unauthorized");
+
+  const url = new URL(req.url);
+  const path = url.pathname.replace(/\/+$/, "");
+  const mandateId = url.searchParams.get("mandateId") || undefined;
+  const allow = (...methods: string[]) =>
+    methods.includes(req.method) ? null : fail(405, `Method ${req.method} not allowed`);
+
+  try {
+    let m: RegExpMatchArray | null;
+
+    if (path === "/api/mandates") {
+      const bad = allow("POST");
+      if (bad) return bad;
+      let raw: unknown;
+      try { raw = await req.json(); } catch { return fail(400, "Body must be valid JSON"); }
+      const parsed = NewMandateBody.safeParse(raw);
+      if (!parsed.success) {
+        const i = parsed.error.issues[0]!;
+        return fail(400, `Invalid ${i.path.join(".") || "body"}: ${i.message}`);
+      }
+      return json(core.createMandate(parsed.data), 201);
+    }
+
+    if ((m = path.match(/^\/api\/mandates\/([^/]+)$/))) {
+      const bad = allow("GET");
+      if (bad) return bad;
+      const mandate = core.getMandate(decodeURIComponent(m[1]!));
+      return mandate ? json(mandate) : fail(404, "Mandate not found");
+    }
+
+    if ((m = path.match(/^\/api\/mandates\/([^/]+)\/revoke$/))) {
+      const bad = allow("POST");
+      if (bad) return bad;
+      const id = decodeURIComponent(m[1]!);
+      if (!core.getMandate(id)) return fail(404, "Mandate not found");
+      return json(core.revokeMandate(id));
+    }
+
+    if (path === "/api/payments") {
+      const bad = allow("GET");
+      if (bad) return bad;
+      return json(core.listPayments(mandateId));
+    }
+
+    if ((m = path.match(/^\/api\/payments\/([^/]+)\/(approve|deny)$/))) {
+      const bad = allow("POST");
+      if (bad) return bad;
+      const id = decodeURIComponent(m[1]!);
+      const payment = core.getPayment(id);
+      if (!payment) return fail(404, "Payment not found");
+      if (payment.status !== "pending_approval") {
+        return fail(409, `Payment is ${payment.status}, not pending approval`);
+      }
+      return json(m[2] === "approve" ? await core.approvePayment(id) : core.denyPayment(id));
+    }
+
+    if (path === "/api/stats") {
+      const bad = allow("GET");
+      if (bad) return bad;
+      return json(core.stats(mandateId));
+    }
+
+    return fail(404, "Not found");
+  } catch (err) {
+    console.error("api error:", err);
+    return fail(500, "Internal error");
+  }
+}
