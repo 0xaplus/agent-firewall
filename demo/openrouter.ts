@@ -1,7 +1,7 @@
 import type { Llm } from "./agent";
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-export const DEFAULT_MODEL = "anthropic/claude-sonnet-5.5";
+export const DEFAULT_MODEL = "anthropic/claude-haiku-5.5";
 
 // The agent loop speaks Anthropic-style content blocks; OpenRouter speaks OpenAI chat completions.
 export function toOpenAiMessages(system: string, messages: any[]): any[] {

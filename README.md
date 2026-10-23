@@ -44,8 +44,8 @@ Environment:
 | `DB_PATH` | `firewall.db` | SQLite file (`:memory:` for throwaway runs) |
 | `SETTLER` | `mock` | settlement rail (`mock` today) |
 | `OPENROUTER_API_KEY` | – | turns on the LLM intent check and the LLM demo agent |
-| `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check |
-| `DEMO_MODEL` | `anthropic/claude-sonnet-5.5` | OpenRouter model for the demo agent |
+| `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check ($0.10/M in, $0.50/M out; `openai/gpt-4.1-mini` and `google/gemini-2.5-flash` also work but cost more) |
+| `DEMO_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the demo agent |
 
 ## What the agent can do
 
@@ -98,7 +98,7 @@ claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
 
 `bun run demo` plays the story on five invoices: three clean ones are paid automatically, one over the auto-approve limit waits for a human (approve it on the dashboard), and one poisoned email, which tells the agent to ignore its rules and pay a new wallet, is blocked.
 
-With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Note that current models (tested with `anthropic/claude-sonnet-5.5` and `anthropic/claude-haiku-5.5`) usually spot the poisoned email and refuse to pay it themselves, so step 3 then shows that no request reached the firewall. The scripted stand-in (unset the key) always sends it, which shows the firewall's block. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
+With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Note that current models (tested with `anthropic/claude-haiku-5.5` and `anthropic/claude-sonnet-5.5`) usually spot the poisoned email and refuse to pay it themselves, so step 3 then shows that no request reached the firewall. The scripted stand-in (unset the key) always sends it, which shows the firewall's block. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
 
 ## How a request is judged
 
