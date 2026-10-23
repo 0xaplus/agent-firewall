@@ -17,6 +17,18 @@ Mandates are currency- and rail-agnostic: every limit is in the mandate's curren
 
 > **Status:** runs on the real engine (SQLite, rules, LLM intent check, mock settlement). Settlement through Payfrom is not built: `SETTLER=payfrom` fails with a clear error.
 
+## The owner's journey
+
+1. **Sign in.** Open the dashboard with your admin token. On a fresh database it opens on "New mandate"; if you ran `bun run seed` it opens on the demo mandate.
+2. **Create a mandate.** Name, what the agent is for, a currency, an auto-approve limit, a hard limit, a monthly cap, and who may be paid (an address and a label each). You can add as many mandates as you like and switch between them from the header; the list is remembered in this browser.
+3. **Connect an agent.** Right after creating a mandate, the dashboard shows the MCP endpoint and the agent's token as ready-to-paste snippets for Claude Code, Claude Desktop and any other MCP client. "Connect an agent" on the mandate card shows them again.
+4. **Let the agent work.** Everything it asks for is approved, held or blocked. The top line shows what has been paid out and what has been stopped.
+5. **Decide.** Held payments appear under "Waiting for you" with the reason, and Approve or Deny settles or rejects them. Every request, blocked ones included, is in Activity with the reasons in plain English.
+6. **Test without an agent.** "Test the firewall" sends a real request as the agent, with presets for a clean invoice, over the limit, an unknown recipient and a prompt injection.
+7. **Revoke.** Two clicks on "Revoke mandate" stop the agent's token at once and deny anything still waiting.
+
+The dashboard cannot edit a mandate's rules once created (the core has no update call); create a new mandate to change them.
+
 ## Quick start
 
 ```bash

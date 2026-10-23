@@ -18,4 +18,14 @@ describe("dashboard page", () => {
     expect(html).toMatch(/setInterval\(refresh,\s*2000\)/);
     expect(html).toMatch(/history\.replaceState/);
   });
+  test("has the owner journey: create a mandate, connect an agent, try a request, approve, revoke", () => {
+    for (const id of ["create", "connect", "tryit", "tryform", "msel", "new-btn", "pending", "feed"]) expect(html).toContain(`id="${id}"`);
+    expect(html).toContain("/api/mandates");
+    expect(html).toContain("/revoke");
+    expect(html).toContain("claude mcp add");
+  });
+  test("never sends the admin token anywhere but same-origin API calls", () => {
+    expect(html).not.toMatch(/https?:\/\/(?!localhost|www\.w3\.org)/);
+    expect(html).not.toMatch(/localStorage\.setItem\([^)]*token/i);
+  });
 });
