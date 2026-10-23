@@ -167,6 +167,8 @@ src/mcp/server.ts      MCP tools + agent-token auth
 src/core.ts            the real Core, wired from env
 src/core.factory.ts    createCore(deps) / createCoreFromEnv()
 src/db.ts              SQLite schema + queries
+src/payments.ts        payment lifecycle: every status change (open, settle, approve, deny, deny on revoke)
+src/errors.ts          CoreError: not_found / wrong_state, mapped to 404 / 409
 src/seed.ts            demo mandate
 src/engine/            rules.ts, risk.ts, intent.ts, evaluate.ts
 src/settle/            index.ts (factory), mock.ts
