@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { createFakeCore } from "../../src/core.fake";
+import { testCore } from "../helpers/testCore";
 import { DEMO_AGENT_TOKEN, DEMO_MANDATE } from "../../src/fixtures";
 import { handleMcp } from "../../src/mcp/server";
 import type { Core } from "../../src/types";
 
 const LAGOS = DEMO_MANDATE.allowlist[0]!.address;
 let core: Core;
-beforeEach(() => { core = createFakeCore(); });
+beforeEach(() => { core = testCore(); });
 
 // Real MCP client talking to handleMcp through an in-process fetch.
 async function connect(token = DEMO_AGENT_TOKEN) {

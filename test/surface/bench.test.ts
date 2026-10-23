@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { report, runBench, summarize, type Attack, type CaseResult } from "../../bench/run";
 import { handleApi } from "../../src/api";
-import { createFakeCore } from "../../src/core.fake";
+import { testCore } from "../helpers/testCore";
 import { DEMO_MANDATE } from "../../src/fixtures";
 import { handleMcp } from "../../src/mcp/server";
 import type { Core } from "../../src/types";
@@ -33,10 +33,10 @@ describe("attacks.json", () => {
   });
 });
 
-describe("runBench against the fake core", () => {
+describe("runBench against the real core", () => {
   let core: Core;
   let saved: string | undefined;
-  beforeEach(() => { core = createFakeCore(); saved = process.env.ADMIN_TOKEN; process.env.ADMIN_TOKEN = "test"; });
+  beforeEach(() => { core = testCore(); saved = process.env.ADMIN_TOKEN; process.env.ADMIN_TOKEN = "test"; });
   afterEach(() => { if (saved === undefined) delete process.env.ADMIN_TOKEN; else process.env.ADMIN_TOKEN = saved; });
 
   const route = async (input: any, init?: any): Promise<Response> => {

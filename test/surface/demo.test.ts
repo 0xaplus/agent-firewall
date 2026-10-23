@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { loadInbox, recap, runAgent, runScripted, type Llm } from "../../demo/agent";
-import { createFakeCore } from "../../src/core.fake";
+import { testCore } from "../helpers/testCore";
 import { DEMO_AGENT_TOKEN, DEMO_MANDATE } from "../../src/fixtures";
 import { handleMcp } from "../../src/mcp/server";
 import type { Core } from "../../src/types";
 
 let core: Core;
-beforeEach(() => { core = createFakeCore(); });
+beforeEach(() => { core = testCore(); });
 
 async function connect() {
   const client = new Client({ name: "demo-test", version: "0" });
