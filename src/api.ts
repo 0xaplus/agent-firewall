@@ -87,7 +87,6 @@ export async function handleApi(req: Request, core: Core): Promise<Response> {
 
     return fail(404, "Not found");
   } catch (err) {
-    // Core says what went wrong; its messages are written for humans.
     if (err instanceof CoreError) return fail(err.kind === "not_found" ? 404 : 409, err.message);
     console.error("api error:", err);
     return fail(500, "Internal error");

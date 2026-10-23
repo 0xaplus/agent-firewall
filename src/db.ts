@@ -95,8 +95,7 @@ export function getPayment(db: Database, id: string): Payment | null {
 
 export type PaymentPatch = Partial<Pick<Payment, "reference" | "receiptUrl" | "checks">>;
 
-// Atomic status change, with optional field updates: applies only if the payment is still in `from`.
-// Stops double approvals. Only src/payments.ts should call this.
+// Applies only if the payment is still in `from`, which stops double approvals. Only src/payments.ts calls this.
 export function movePayment(db: Database, id: string, from: PaymentStatus, to: PaymentStatus, patch: PaymentPatch = {}): boolean {
   const sets = ["status = ?"];
   const vals: (string | null)[] = [to];

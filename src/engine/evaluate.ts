@@ -21,7 +21,7 @@ function ctxFor(deps: EvalDeps, mandate: Mandate, req: PaymentRequest): RuleCtx 
 
 const blockedBy = (checks: Check[]) => verdictOf(checks) === "blocked";
 
-// Rules → intent (only if nothing blocked yet) → stored by the payment lifecycle, which settles it if approved.
+// Rules → intent (only if nothing blocked yet) → payment lifecycle.
 export async function evaluate(deps: EvalDeps, mandate: Mandate, req: PaymentRequest): Promise<Payment> {
   let checks = runRules(ctxFor(deps, mandate, req));
   let intentScore: number | null = null;

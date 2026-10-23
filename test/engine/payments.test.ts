@@ -25,7 +25,6 @@ beforeEach(() => {
 });
 
 let n = 0;
-// A stored payment in the given status, as if it had got there legally.
 function stored(status: PaymentStatus, over: Partial<Payment> = {}): Payment {
   const p: Payment = {
     id: `pay_t${n++}`, mandateId: DEMO_MANDATE.id, amount: 500, currency: "USDC", recipient: LAGOS, purpose: "x",

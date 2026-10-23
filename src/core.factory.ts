@@ -44,7 +44,6 @@ export function createCore(deps: EvalDeps): Core {
       return m;
     },
     getMandate: (id) => getMandate(db, id),
-    // Stops the agent's token at once and denies everything still waiting for a human.
     revokeMandate(id) {
       needMandate(id);
       setMandateStatus(db, id, "revoked");

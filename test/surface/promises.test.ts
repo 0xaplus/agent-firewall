@@ -19,7 +19,6 @@ let saved: string | undefined;
 beforeEach(() => { core = testCore(); saved = process.env.ADMIN_TOKEN; process.env.ADMIN_TOKEN = ADMIN; });
 afterEach(() => { if (saved === undefined) delete process.env.ADMIN_TOKEN; else process.env.ADMIN_TOKEN = saved; });
 
-// The agent: a real MCP client, sending its Bearer token to /mcp.
 async function agent(token = DEMO_AGENT_TOKEN) {
   const client = new Client({ name: "judge", version: "0" });
   await client.connect(new StreamableHTTPClientTransport(new URL("http://x/mcp"), {
@@ -39,7 +38,6 @@ async function agent(token = DEMO_AGENT_TOKEN) {
   };
 }
 
-// The human: the admin REST API.
 const human = (method: string, path: string) =>
   handleApi(new Request(`http://x${path}`, { method, headers: { authorization: `Bearer ${ADMIN}` } }), core);
 
