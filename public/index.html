@@ -237,6 +237,7 @@
     <div class="hdr">
       <select id="msel" aria-label="Mandate" hidden></select>
       <button class="ghost" id="new-btn" type="button" hidden>New mandate</button>
+    <button class="ghost" id="signout" type="button" hidden>Sign out</button>
       <span class="live" id="live" role="status">connecting…</span>
     </div>
   </div>
@@ -327,8 +328,13 @@
 <script>
 "use strict";
 const params = new URLSearchParams(location.search);
-// The token lives in memory only: read it from the URL once, then scrub it from the address bar.
-let token = params.get("token") || "";
+// The admin token is kept in sessionStorage: it survives a refresh and is gone when the tab closes.
+// It is read from the URL once, then scrubbed from the address bar.
+const TOKEN_KEY = "sf.token";
+const savedToken = () => { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; } };
+const saveToken = (t) => { try { t ? sessionStorage.setItem(TOKEN_KEY, t) : sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked: you just sign in again after a refresh */ } };
+let token = params.get("token") || savedToken();
+if (params.get("token")) saveToken(token);
 let mandateId = params.get("mandate") || "";
 if (params.has("token")) { params.delete("token"); history.replaceState(null, "", location.pathname + (params.size ? "?" + params : "")); }
 
@@ -462,6 +468,7 @@ function renderSelector() {
   sel.replaceChildren(...list.map((m) => h("option", { value: m.id, ...(m.id === mandateId ? { selected: "" } : {}) }, m.name)));
   sel.hidden = list.length < 2;
   $("new-btn").hidden = !token;
+  $("signout").hidden = !token;
 }
 $("msel").addEventListener("change", (e) => switchTo(e.target.value));
 function switchTo(id) {
@@ -643,6 +650,7 @@ async function refresh() {
   try {
     await bootstrap();
     $("new-btn").hidden = false;
+    $("signout").hidden = false;
     if (!mandateId) { $("login").classList.remove("show"); renderSelector(); setNoMandate(true); setLive(true, "connected · no mandate yet"); return; }
     const q = `?mandateId=${encodeURIComponent(mandateId)}`;
     const [m, stats, payments] = await Promise.all([
@@ -656,13 +664,14 @@ async function refresh() {
     if (wasEmpty) renderTry(m);
     setLive(true, `live · updated ${new Date().toLocaleTimeString()}`);
   } catch (e) {
-    if (e.status === 401) { token = ""; $("login").classList.add("show"); showError("Admin token rejected. Enter it again."); setLive(false, "not connected"); }
+    if (e.status === 401) { token = ""; saveToken(""); $("login").classList.add("show"); showError("Admin token rejected. Enter it again."); setLive(false, "not connected"); }
     else if (e.status === 404 && mandateId) { forget(mandateId); showError("That mandate no longer exists."); mandateId = ""; mandate = null; }
     else { showError(`Dashboard error: ${e.message}`); setLive(false, "disconnected"); }
   } finally { inFlight = false; }
 }
 
-$("login").addEventListener("submit", (e) => { e.preventDefault(); token = $("tok").value.trim(); $("tok").value = ""; refresh(); });
+$("login").addEventListener("submit", (e) => { e.preventDefault(); token = $("tok").value.trim(); saveToken(token); $("tok").value = ""; refresh(); });
+$("signout").addEventListener("click", () => { saveToken(""); location.reload(); });
 refresh();
 setInterval(refresh, 2000);
 </script>

@@ -37,7 +37,7 @@ bun run seed                          # demo mandate + agent token, into firewal
 ADMIN_TOKEN=change-me bun run dev     # http://localhost:3000
 ```
 
-Open `http://localhost:3000/?token=change-me`. The token is read once, kept in memory only and removed from the address bar. The seeded demo mandate is `mdt_ada` (200 auto-approve / 1000 hard / 2000 monthly, four allowlisted suppliers), agent token `agt_demo_ada`.
+Open `http://localhost:3000/?token=change-me`. The token is read once and removed from the address bar. It is kept in `sessionStorage`: a refresh keeps you signed in, closing the tab signs you out, and so does the Sign out button. The seeded demo mandate is `mdt_ada` (200 auto-approve / 1000 hard / 2000 monthly, four allowlisted suppliers), agent token `agt_demo_ada`.
 
 In another terminal:
 

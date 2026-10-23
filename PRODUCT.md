@@ -17,7 +17,7 @@ The agent-facing endpoint has no tool that can read or edit the rules, and an LL
 
 ## Capabilities and Constraints
 - Dashboard is a single file: public/index.html, vanilla JS, no build step, no frameworks, no external scripts.
-- Polls the REST API every 2 seconds with an admin token held in memory only.
+- Polls the REST API every 2 seconds with an admin token held in sessionStorage (gone when the tab closes).
 - Mandates are currency- and rail-agnostic; the UI never hardcodes a currency or an address format.
 - Settlement is currently a mock rail; real rails come later.
 

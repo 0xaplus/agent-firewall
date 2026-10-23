@@ -14,7 +14,7 @@ describe("dashboard page", () => {
   test("renders agent-controlled text without innerHTML", () => {
     expect(html).not.toMatch(/innerHTML|insertAdjacentHTML|document\.write/);
   });
-  test("polls the API every 2s and scrubs the token from the URL", () => {
+  test("polls the API every 2s, keeps the token in sessionStorage only and scrubs it from the URL", () => {
     expect(html).toMatch(/setInterval\(refresh,\s*2000\)/);
     expect(html).toMatch(/history\.replaceState/);
   });
@@ -26,6 +26,7 @@ describe("dashboard page", () => {
   });
   test("never sends the admin token anywhere but same-origin API calls", () => {
     expect(html).not.toMatch(/https?:\/\/(?!localhost|www\.w3\.org)/);
-    expect(html).not.toMatch(/localStorage\.setItem\([^)]*token/i);
+    expect(html).toContain("sessionStorage.setItem(TOKEN_KEY");
+    expect(html).not.toMatch(/localStorage[^;]*TOKEN_KEY/);
   });
 });
