@@ -161,9 +161,9 @@ src/db.ts              SQLite schema + queries
 src/seed.ts            demo mandate
 src/engine/            rules.ts, risk.ts, intent.ts, evaluate.ts
 src/settle/            index.ts (factory), mock.ts
-src/core.fake.ts       in-memory Core, used by the surface tests
 public/index.html      dashboard (one file, vanilla JS, polls every 2s)
 demo/                  agent.ts, openrouter.ts, inbox/*.json
 bench/                 attacks.json + run.ts
 test/                  engine/, core.contract.test.ts, surface/
+test/helpers/          testCore(): the real Core on in-memory SQLite + mock settler, no network
 ```
