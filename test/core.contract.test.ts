@@ -131,12 +131,13 @@ describe("Core: human side", () => {
     expect(done.status).toBe("failed");
     expect(done.checks.at(-1)!.reason).toContain("rail down");
   });
-  test("approvePayment: a mandate revoked in the meantime denies instead of paying", async () => {
+  test("revokeMandate: denies everything still waiting for a human; approving afterwards is refused", async () => {
     const p = await ask(500);
     core.revokeMandate(DEMO_MANDATE.id);
-    const done = await core.approvePayment(p.id);
-    expect([done.status, done.reference]).toEqual(["denied", undefined]);
-    expect(done.checks.at(-1)!.reason).toContain("revoked");
+    const after = core.getPayment(p.id)!;
+    expect([after.status, after.reference]).toEqual(["denied", undefined]);
+    expect(after.checks.at(-1)!.reason).toContain("revoked");
+    await expect(core.approvePayment(p.id)).rejects.toThrow("not pending approval");
   });
   test("denyPayment: pending → denied; others and unknown throw", async () => {
     const p = await ask(500);

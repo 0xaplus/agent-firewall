@@ -19,7 +19,6 @@ let saved: string | undefined;
 beforeEach(() => { core = testCore(); saved = process.env.ADMIN_TOKEN; process.env.ADMIN_TOKEN = ADMIN; });
 afterEach(() => { if (saved === undefined) delete process.env.ADMIN_TOKEN; else process.env.ADMIN_TOKEN = saved; });
 
-// The agent: a real MCP client, sending its Bearer token to /mcp.
 async function agent(token = DEMO_AGENT_TOKEN) {
   const client = new Client({ name: "judge", version: "0" });
   await client.connect(new StreamableHTTPClientTransport(new URL("http://x/mcp"), {
@@ -39,7 +38,6 @@ async function agent(token = DEMO_AGENT_TOKEN) {
   };
 }
 
-// The human: the admin REST API.
 const human = (method: string, path: string) =>
   handleApi(new Request(`http://x${path}`, { method, headers: { authorization: `Bearer ${ADMIN}` } }), core);
 
@@ -152,13 +150,14 @@ describe("revoking a mandate", () => {
     expect(res.status).toBe(401);
   });
 
-  test("a held payment cannot be paid after the mandate is revoked, even if a human approves it", async () => {
-    const p = await (await agent()).pay(500, LAGOS);
+  test("revoking a mandate denies everything still waiting for a human, and nothing is paid", async () => {
+    const a = await agent();
+    const p = await a.pay(500, LAGOS);
     await human("POST", `/api/mandates/${DEMO_MANDATE.id}/revoke`);
-    const res = await human("POST", `/api/payments/${p.paymentId}/approve`);
-    const after = await res.json() as any;
-    expect(after.status).toBe("denied");
-    expect(after.reference).toBeUndefined();
+    const log = await (await human("GET", `/api/payments?mandateId=${DEMO_MANDATE.id}`)).json() as any[];
+    expect(log.map((x) => [x.id, x.status])).toEqual([[p.paymentId, "denied"]]);
+    expect((await human("POST", `/api/payments/${p.paymentId}/approve`)).status).toBe(409);
+    expect(log[0].reference).toBeUndefined();
   });
 });
 

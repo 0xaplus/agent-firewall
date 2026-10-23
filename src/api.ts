@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CoreError } from "./errors";
 import type { Core } from "./types";
 
 const nonEmpty = z.string().trim().min(1);
@@ -62,9 +63,7 @@ export async function handleApi(req: Request, core: Core): Promise<Response> {
     if ((m = path.match(/^\/api\/mandates\/([^/]+)\/revoke$/))) {
       const bad = allow("POST");
       if (bad) return bad;
-      const id = decodeURIComponent(m[1]!);
-      if (!core.getMandate(id)) return fail(404, "Mandate not found");
-      return json(core.revokeMandate(id));
+      return json(core.revokeMandate(decodeURIComponent(m[1]!)));
     }
 
     if (path === "/api/payments") {
@@ -77,11 +76,6 @@ export async function handleApi(req: Request, core: Core): Promise<Response> {
       const bad = allow("POST");
       if (bad) return bad;
       const id = decodeURIComponent(m[1]!);
-      const payment = core.getPayment(id);
-      if (!payment) return fail(404, "Payment not found");
-      if (payment.status !== "pending_approval") {
-        return fail(409, `Payment is ${payment.status}, not pending approval`);
-      }
       return json(m[2] === "approve" ? await core.approvePayment(id) : core.denyPayment(id));
     }
 
@@ -93,6 +87,7 @@ export async function handleApi(req: Request, core: Core): Promise<Response> {
 
     return fail(404, "Not found");
   } catch (err) {
+    if (err instanceof CoreError) return fail(err.kind === "not_found" ? 404 : 409, err.message);
     console.error("api error:", err);
     return fail(500, "Internal error");
   }

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import {
   getMandate, getMandateByToken, getPayment, historyTo, insertMandate, insertPayment, listPayments,
-  monthSpend, openDb, recentPayments, setMandateStatus, transitionPayment, updatePayment,
+  monthSpend, openDb, recentPayments, setMandateStatus, movePayment,
 } from "../../src/db";
 import { DEMO_MANDATE } from "../../src/fixtures";
 import type { Payment } from "../../src/types";
@@ -45,22 +45,24 @@ describe("payments", () => {
     expect("context" in getPayment(db, bare.id)!).toBe(false);
     expect(getPayment(db, "nope")).toBeNull();
   });
-  test("updatePayment patches only the given fields", () => {
+  test("movePayment changes status and patches only the given fields", () => {
     const p = pay({ status: "settling" });
     insertPayment(db, p);
-    updatePayment(db, p.id, { status: "settled", reference: "r", receiptUrl: "u" });
+    expect(movePayment(db, p.id, "settling", "settled", { reference: "r", receiptUrl: "u" })).toBe(true);
     expect(getPayment(db, p.id)).toMatchObject({ status: "settled", reference: "r", receiptUrl: "u", amount: 100 });
+    const q = pay({ status: "settling" });
+    insertPayment(db, q);
     const checks = [{ name: "s", pass: false, severity: "info" as const, reason: "boom" }];
-    updatePayment(db, p.id, { checks });
-    expect(getPayment(db, p.id)?.checks).toEqual(checks);
-    updatePayment(db, p.id, {});
+    expect(movePayment(db, q.id, "settling", "failed", { checks })).toBe(true);
+    expect(getPayment(db, q.id)).toMatchObject({ status: "failed", checks });
   });
-  test("transitionPayment succeeds once and only from the expected status", () => {
+  test("movePayment succeeds once and only from the expected status", () => {
     const p = pay({ status: "pending_approval" });
     insertPayment(db, p);
-    expect(transitionPayment(db, p.id, "pending_approval", "settling")).toBe(true);
-    expect(transitionPayment(db, p.id, "pending_approval", "settling")).toBe(false);
-    expect(getPayment(db, p.id)?.status).toBe("settling");
+    expect(movePayment(db, p.id, "pending_approval", "settling")).toBe(true);
+    expect(movePayment(db, p.id, "pending_approval", "settling", { reference: "x" })).toBe(false);
+    expect(getPayment(db, p.id)).toMatchObject({ status: "settling" });
+    expect(getPayment(db, p.id)!.reference).toBeUndefined();
   });
   test("listPayments is newest first and filters by mandate", () => {
     const a = pay({ createdAt: ago(5) }), b = pay({ createdAt: ago(3) }), c = pay({ createdAt: ago(3) });

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { getPayment, insertMandate, openDb } from "../../src/db";
-import { evaluate, settlePayment, type EvalDeps } from "../../src/engine/evaluate";
+import { evaluate, type EvalDeps } from "../../src/engine/evaluate";
 import type { IntentResult } from "../../src/engine/intent";
 import { riskScore, verdictOf } from "../../src/engine/risk";
 import { DEMO_MANDATE } from "../../src/fixtures";
@@ -166,8 +166,5 @@ describe("settlement", () => {
   test("receiptUrl from the settler is stored", async () => {
     deps.settler = { name: "r", supports: () => true, send: async () => ({ reference: "tx1", receiptUrl: "https://x/tx1" }) };
     expect((await run()).receiptUrl).toBe("https://x/tx1");
-  });
-  test("settlePayment on an unknown id throws", async () => {
-    await expect(settlePayment(deps, "pay_nope")).rejects.toThrow("not found");
   });
 });
