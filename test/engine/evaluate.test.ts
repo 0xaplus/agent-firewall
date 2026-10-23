@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { getPayment, insertMandate, openDb } from "../../src/db";
+import { getPayment, insertMandate, openDb, setMandateStatus } from "../../src/db";
 import { evaluate, type EvalDeps } from "../../src/engine/evaluate";
 import type { IntentResult } from "../../src/engine/intent";
 import { riskScore, verdictOf } from "../../src/engine/risk";
@@ -131,6 +131,14 @@ describe("evaluate", () => {
     const p = await run({ amount: 180 }); // under auto-approve, but > 5× median 11
     expect(failedNames(p)).toEqual(["anomaly"]);
     expect(p.verdict).toBe("needs_approval");
+  });
+  test("a mandate revoked while the intent check runs: blocked, and never sent to the settler", async () => {
+    let sent = 0;
+    deps.settler = { name: "count", supports: () => true, send: async () => { sent++; return { reference: "r" }; } };
+    deps.intent = async () => { setMandateStatus(db, DEMO_MANDATE.id, "revoked"); return OK_INTENT; };
+    const p = await run();
+    expect([p.verdict, p.status, sent]).toEqual(["blocked", "blocked", 0]);
+    expect(p.checks.find((c) => c.name === "mandate_active")?.reason).toContain("revoked");
   });
   test("concurrent requests can't both slip under the velocity or cap limits", async () => {
     deps.intent = async () => { await new Promise((r) => setTimeout(r, 15)); return OK_INTENT; };

@@ -1,4 +1,4 @@
-import { historyTo, monthSpend, recentPayments } from "../db";
+import { getMandate, historyTo, monthSpend, recentPayments } from "../db";
 import { openPayment, type PaymentDeps } from "../payments";
 import type { Check, Mandate, Payment, PaymentRequest } from "../types";
 import type { IntentInput, IntentResult } from "./intent";
@@ -37,7 +37,9 @@ export async function evaluate(deps: EvalDeps, mandate: Mandate, req: PaymentReq
     } catch {
       intent = { score: null, checks: [{ name: "intent", pass: false, severity: "escalate", reason: "Intent check unavailable (error); a human should review." }] };
     }
-    // The LLM call was async: re-read spend and recent requests so concurrent requests can't both slip under a limit.
+    // The LLM call was async: re-read the mandate (it may have been revoked), spend and recent requests,
+    // so a revoke takes effect and concurrent requests can't both slip under a limit.
+    mandate = getMandate(deps.db, mandate.id) ?? mandate;
     checks = [...runRules(ctxFor(deps, mandate, req)), ...intent.checks];
     intentScore = intent.score;
   }
