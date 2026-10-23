@@ -61,12 +61,14 @@ export type PaymentStatus =
   | "pending_approval" | "settling" | "settled"
   | "blocked" | "denied" | "failed";
 
-export interface Recipient { address: string; label: string; category: string }
+// address = whatever the rail understands: wallet address, account number, IBAN, mobile-money number...
+export interface Recipient { address: string; label: string; category: string; rail?: string }
 
 export interface Mandate {
   id: string;
   name: string;            // "Ada Imports — ops agent"
   task: string;            // what the agent is for, used by intent check
+  currency: string;        // "USDC", "USD", "NGN"... every limit on this mandate is in this currency
   agentToken: string;      // agt_xxx, sent by the agent as Bearer token
   autoApproveMax: number;  // ≤ this → auto if all checks pass
   hardMax: number;         // > this → always blocked
@@ -78,7 +80,8 @@ export interface Mandate {
 export type NewMandate = Omit<Mandate, "id" | "agentToken" | "status">;
 
 export interface PaymentRequest {
-  amount: number;          // USDC
+  amount: number;          // in the mandate's currency
+  currency?: string;       // optional; if given it must equal the mandate currency
   recipient: string;       // address
   purpose: string;         // agent's stated reason
   context?: string;        // the content the agent was acting on (email, invoice)
@@ -93,23 +96,27 @@ export interface Check {
 
 export interface Payment extends PaymentRequest {
   id: string;
+  currency: string;
   mandateId: string;
   verdict: Verdict;
   status: PaymentStatus;
   risk: number;            // 0–100, display only
   checks: Check[];
-  txHash?: string;
-  explorerUrl?: string;
+  reference?: string;      // tx hash, bank reference, transfer id — whatever the rail returns
+  receiptUrl?: string;     // explorer link, receipt page, if the rail has one
   createdAt: string;
 }
 
 export interface Settler {
+  name: string;                                  // "mock", "payfrom", "stripe", ...
+  supports(currency: string): boolean;
   // idempotent on paymentId
-  send(p: { paymentId: string; amount: number; recipient: string }):
-    Promise<{ txHash: string; explorerUrl: string }>;
+  send(p: { paymentId: string; amount: number; currency: string; recipient: string }):
+    Promise<{ reference: string; receiptUrl?: string }>;
 }
 
 export interface Limits {
+  currency: string;
   monthlyCap: number; spentThisMonth: number; remaining: number;
   autoApproveMax: number; hardMax: number;
   allowedRecipients: Recipient[];
@@ -117,7 +124,7 @@ export interface Limits {
 
 export interface Stats {
   total: number; approved: number; needsApproval: number; blocked: number;
-  settledUsdc: number; blockedUsdc: number;
+  settledAmount: number; blockedAmount: number;   // in the mandate currency
 }
 
 // THE SEAM: Part A implements this (src/core.ts), Part B only calls it.
@@ -148,6 +155,7 @@ export const DEMO_MANDATE: Mandate = {
   id: "mdt_ada",
   name: "Ada Imports — ops agent",
   task: "Pay Ada Imports' weekly supplier invoices and shipping labels.",
+  currency: "USDC",
   agentToken: DEMO_AGENT_TOKEN,
   autoApproveMax: 200, hardMax: 1000, monthlyCap: 2000,
   allowlist: [
@@ -182,6 +190,8 @@ Read docs/PLAN.md first, then your part's doc (docs/PART_A.md or docs/PART_B.md)
 - Engine functions are pure where possible; pass dependencies (db, llm client, settler) in.
 - The agent-facing MCP server must never expose a way to edit mandates.
 - The LLM check may only make a verdict stricter. On error/timeout: needs_approval.
+- Never hardcode a currency or a rail. Read currency from the mandate; talk to money only through the Settler interface.
+- Recipient addresses are opaque strings (wallet, IBAN, account number). Only a Settler may validate their format.
 - Default to SETTLER=mock. Never call Payfrom in tests.
 - Every function you add gets a test. Run `bun test` before finishing.
 - Check.reason is shown to humans: short, specific, plain English.
@@ -215,7 +225,7 @@ The shared contract lives in `src/types.ts` (the `Core` interface) and `src/fixt
 - **LLM:** `@anthropic-ai/sdk`, model `claude-haiku-5-5` (fast, cheap) for the intent check
 - **Validation:** `zod`
 - **Dashboard:** one `public/index.html`, vanilla JS, polls `/api` every 2s
-- **Settlement:** Payfrom API (USDC) behind a `Settler` interface; `mock` adapter by default
+- **Settlement:** pluggable rails behind a `Settler` interface. `mock` by default; `payfrom` (USDC) is the demo rail. Stripe, bank transfer, x402 etc. are future adapters.
 
 ## Architecture
 
@@ -238,11 +248,12 @@ Agent (Claude Code / Claude Desktop / demo agent / any MCP client)
 Human → dashboard (Telegram = stretch) → approve / deny → settle
 ```
 
-**Three non-negotiable design rules:**
+**Four non-negotiable design rules:**
 
 1. **The agent can never change its own rules.** MCP exposes no mandate-editing tool. Mandates are edited only via the dashboard/API with the admin token.
 2. **The LLM can only make things stricter.** It can escalate or block; it can never approve something the deterministic rules blocked.
 3. **Fail closed.** LLM timeout or error → `needs_approval`, never `approved`.
+4. **Currency- and rail-agnostic.** One mandate = one currency; all limits are in it and the engine never does FX. Money moves only through a `Settler`, so new rails plug in without touching the engine.
 
 ## Repo layout
 
@@ -272,7 +283,7 @@ spend-firewall/
   test/surface/          [B]
 ```
 
-**Env:** `PORT=3000`, `ADMIN_TOKEN`, `ANTHROPIC_API_KEY`, `SETTLER=mock|payfrom`, `PAYFROM_API_KEY`, `PAYFROM_BASE_URL`.
+**Env:** `PORT=3000`, `ADMIN_TOKEN`, `ANTHROPIC_API_KEY`, `SETTLER=mock|payfrom`, `PAYFROM_API_KEY`, `PAYFROM_BASE_URL`. Settler is chosen by `SETTLER`; each settler declares which currencies it supports.
 
 **SQLite:** `mandates` (columns mirror `Mandate`, `allowlist` as JSON) and `payments` (columns mirror `Payment`, `checks` as JSON). That's it.
 
@@ -282,6 +293,7 @@ spend-firewall/
 
 | ID | Check | Fails → |
 |---|---|---|
+| R0 | Request currency (if given) equals mandate currency | block |
 | R1 | Mandate active and not expired | block |
 | R2 | Recipient on allowlist | block |
 | R3 | Amount ≤ hardMax | block |
@@ -300,7 +312,7 @@ spend-firewall/
 
 **Verdict** (`risk.ts`): any `block` → `blocked`; else any `escalate` → `needs_approval`; else `approved`. Risk score = 50 per failed block check + 20 per failed escalate check, blended with LLM score, capped at 100. The score is for display only; severities decide.
 
-**Order in evaluate.ts:** run R1–R8 → if not already blocked, run intent → verdict → insert payment row → if approved, settle immediately → return.
+**Order in evaluate.ts:** run R0–R8 → if not already blocked, run intent → verdict → insert payment row → if approved, settle immediately → return.
 
 ## Interfaces
 
@@ -308,8 +320,8 @@ spend-firewall/
 
 | Tool | Input | Returns |
 |---|---|---|
-| `request_payment` | `amount, recipient, purpose, context?` | verdict, reasons, `paymentId`, `txHash` if settled |
-| `get_payment_status` | `paymentId` | status, txHash |
+| `request_payment` | `amount, recipient, purpose, currency?, context?` | verdict, reasons, `paymentId`, `reference` if settled |
+| `get_payment_status` | `paymentId` | status, reference |
 | `get_spending_limits` | — | remaining monthly budget, autoApproveMax, allowlist labels |
 
 Auth: the Bearer `agt_` token maps to exactly one mandate (`core.mandateForToken`). Unknown token → 401.
@@ -319,7 +331,7 @@ Auth: the Bearer `agt_` token maps to exactly one mandate (`core.mandateForToken
 - `POST /api/mandates`, `GET /api/mandates/:id`, `POST /api/mandates/:id/revoke`
 - `GET /api/payments?mandateId=`
 - `POST /api/payments/:id/approve` → settle; `POST /api/payments/:id/deny`
-- `GET /api/stats` → counts by verdict, USDC settled, USDC blocked
+- `GET /api/stats` → counts by verdict, amount settled, amount blocked (in mandate currency)
 
 ## Two parts, built in parallel
 
@@ -370,9 +382,9 @@ Branch `part-a`. You build everything behind the `Core` interface: storage, poli
 | ID | Task | Done when |
 |---|---|---|
 | A1 | `db.ts`: `bun:sqlite` schema for mandates and payments (allowlist and checks as JSON columns). Helpers: insert/get/update/list payments, `monthSpend(mandateId)`, `recentPayments(mandateId, minutes)`, `historyTo(mandateId, recipient)` | A test on a temp DB round-trips a `Payment` |
-| A2 | `engine/rules.ts`: R1–R8 from docs/PLAN.md as pure functions `(ctx) => Check`, where `ctx = { mandate, req, monthSpend, recent, history, now }` | Each rule has one passing and one failing test |
+| A2 | `engine/rules.ts`: R0–R8 from docs/PLAN.md as pure functions `(ctx) => Check`, where `ctx = { mandate, req, monthSpend, recent, history, now }` | Each rule has one passing and one failing test |
 | A3 | `engine/risk.ts` + `engine/evaluate.ts`: rules → intent (skipped if already blocked) → verdict + risk score | Clean / over-threshold / poisoned requests give approved / needs_approval / blocked |
-| A4 | `settle/mock.ts`, `settle/payfrom.ts`, `settle/index.ts` (factory on `SETTLER` env) | Mock returns a fake hash; Payfrom sends a small real USDC transfer; same `paymentId` twice = one transfer |
+| A4 | `settle/mock.ts` (supports any currency), `settle/payfrom.ts` (USDC), `settle/index.ts` (factory on `SETTLER` env). Each implements `Settler` incl. `name` and `supports(currency)` | Mock returns a fake reference; Payfrom (USDC) sends a small real transfer; same `paymentId` twice = one transfer |
 | A5 | `core.ts`: implement every `Core` method on A1–A4. `seed.ts` inserts `DEMO_MANDATE` from fixtures | `bun run seed` works; `requestPayment` settles approved payments |
 | A6 | `test/core.contract.test.ts`: calls every `Core` method with the mock settler and a fake LLM | Green = ready to merge |
 | A7 | `engine/intent.ts`: `checkIntent(llm, input) => Check[]`, model `claude-haiku-5-5`, 5s timeout, JSON output, client injected | Fake-LLM tests: aligned → pass, injection → block, timeout/error → escalate |
@@ -425,10 +437,10 @@ import { core } from "./core.fake"; // swap to "./core" at integration
 
 | ID | Task | Done when |
 |---|---|---|
-| B1 | `core.fake.ts`: in-memory `Core` loaded with `DEMO_MANDATE`. Fake verdicts: unknown recipient or "ignore previous" in context → blocked; amount > autoApproveMax → needs_approval; else approved with a fake txHash | Demo and dashboard look realistic before A merges |
+| B1 | `core.fake.ts`: in-memory `Core` loaded with `DEMO_MANDATE`. Fake verdicts: unknown recipient or "ignore previous" in context → blocked; amount > autoApproveMax → needs_approval; else approved with a fake reference | Demo and dashboard look realistic before A merges |
 | B2 | `index.ts` (`Bun.serve`: `/mcp`, `/api/*`, `/` static) + `api.ts` REST routes with `ADMIN_TOKEN` check | `curl` on each route returns JSON from the fake core |
 | B3 | `mcp/server.ts`: Streamable HTTP at `/mcp`; tools `request_payment`, `get_payment_status`, `get_spending_limits`; Bearer `agt_` token → `core.mandateForToken`, else 401 | MCP Inspector lists 3 tools; `request_payment` returns verdict + reasons |
-| B4 | `public/index.html`: mandate card (limits, allowlist); live feed polling `/api/payments` every 2s (verdict colour, reasons, risk, tx link); pending approvals with Approve/Deny; counters (USDC settled, USDC blocked) | A blocked payment shows within 2s with reasons; Approve flips it to settled |
+| B4 | `public/index.html`: mandate card (limits, allowlist); live feed polling `/api/payments` every 2s (verdict colour, reasons, risk, receipt link); pending approvals with Approve/Deny; counters (amount settled, amount blocked, shown with the mandate currency) | A blocked payment shows within 2s with reasons; Approve flips it to settled |
 | B5 | `demo/agent.ts` + `demo/inbox`: Anthropic tool-use loop connected to `/mcp`, task "pay this week's supplier invoices"; inbox = 3 clean, 1 over threshold, 1 poisoned | `bun run demo` plays the 4-step story |
 | B6 | `bench/attacks.json` (20 cases: hidden instructions, swapped address, lookalike address, inflated amount, split payments, fake urgency) + `bench/run.ts`: naive mode (agent pays a mock directly) vs firewalled (via `/mcp`) | Prints "naive paid X/20, firewalled paid Y/20" |
 | B7 | Claude Code / Claude Desktop config snippet in README; run one attack from it | Same attack blocked from a second agent |
@@ -443,6 +455,7 @@ Integration 1 (23:00) needs B1–B4. B5 should be close.
 - Tool results always include the reasons, so the agent can tell its user why a payment was blocked.
 - `context` from the agent is untrusted: pass it to `core`, never act on it.
 - Dashboard: one HTML file, vanilla JS, no build step.
+- Never hardcode "USDC" or a 0x address pattern. Show the currency from the mandate; accept any non-empty recipient string.
 
 ## Work in isolation
 

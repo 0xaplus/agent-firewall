@@ -18,6 +18,8 @@ Read docs/PLAN.md first, then your part's doc (docs/PART_A.md or docs/PART_B.md)
 - Engine functions are pure where possible; pass dependencies (db, llm client, settler) in.
 - The agent-facing MCP server must never expose a way to edit mandates.
 - The LLM check may only make a verdict stricter. On error/timeout: needs_approval.
+- Never hardcode a currency or a rail. Read currency from the mandate; talk to money only through the Settler interface.
+- Recipient addresses are opaque strings (wallet, IBAN, account number). Only a Settler may validate their format.
 - Default to SETTLER=mock. Never call Payfrom in tests.
 - Every function you add gets a test. Run `bun test` before finishing.
 - Check.reason is shown to humans: short, specific, plain English.

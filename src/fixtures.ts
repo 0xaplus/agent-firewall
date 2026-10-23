@@ -7,6 +7,7 @@ export const DEMO_MANDATE: Mandate = {
   id: "mdt_ada",
   name: "Ada Imports — ops agent",
   task: "Pay Ada Imports' weekly supplier invoices and shipping labels.",
+  currency: "USDC",
   agentToken: DEMO_AGENT_TOKEN,
   autoApproveMax: 200, hardMax: 1000, monthlyCap: 2000,
   allowlist: [

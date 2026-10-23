@@ -3,12 +3,14 @@ export type PaymentStatus =
   | "pending_approval" | "settling" | "settled"
   | "blocked" | "denied" | "failed";
 
-export interface Recipient { address: string; label: string; category: string }
+// address = whatever the rail understands: wallet address, account number, IBAN, mobile-money number...
+export interface Recipient { address: string; label: string; category: string; rail?: string }
 
 export interface Mandate {
   id: string;
   name: string;            // "Ada Imports — ops agent"
   task: string;            // what the agent is for, used by intent check
+  currency: string;        // "USDC", "USD", "NGN"... every limit on this mandate is in this currency
   agentToken: string;      // agt_xxx, sent by the agent as Bearer token
   autoApproveMax: number;  // ≤ this → auto if all checks pass
   hardMax: number;         // > this → always blocked
@@ -20,7 +22,8 @@ export interface Mandate {
 export type NewMandate = Omit<Mandate, "id" | "agentToken" | "status">;
 
 export interface PaymentRequest {
-  amount: number;          // USDC
+  amount: number;          // in the mandate's currency
+  currency?: string;       // optional; if given it must equal the mandate currency
   recipient: string;       // address
   purpose: string;         // agent's stated reason
   context?: string;        // the content the agent was acting on (email, invoice)
@@ -35,23 +38,27 @@ export interface Check {
 
 export interface Payment extends PaymentRequest {
   id: string;
+  currency: string;
   mandateId: string;
   verdict: Verdict;
   status: PaymentStatus;
   risk: number;            // 0–100, display only
   checks: Check[];
-  txHash?: string;
-  explorerUrl?: string;
+  reference?: string;      // tx hash, bank reference, transfer id — whatever the rail returns
+  receiptUrl?: string;     // explorer link, receipt page, if the rail has one
   createdAt: string;
 }
 
 export interface Settler {
+  name: string;                                  // "mock", "payfrom", "stripe", ...
+  supports(currency: string): boolean;
   // idempotent on paymentId
-  send(p: { paymentId: string; amount: number; recipient: string }):
-    Promise<{ txHash: string; explorerUrl: string }>;
+  send(p: { paymentId: string; amount: number; currency: string; recipient: string }):
+    Promise<{ reference: string; receiptUrl?: string }>;
 }
 
 export interface Limits {
+  currency: string;
   monthlyCap: number; spentThisMonth: number; remaining: number;
   autoApproveMax: number; hardMax: number;
   allowedRecipients: Recipient[];
@@ -59,7 +66,7 @@ export interface Limits {
 
 export interface Stats {
   total: number; approved: number; needsApproval: number; blocked: number;
-  settledUsdc: number; blockedUsdc: number;
+  settledAmount: number; blockedAmount: number;   // in the mandate currency
 }
 
 // THE SEAM: Part A implements this (src/core.ts), Part B only calls it.
