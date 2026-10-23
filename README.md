@@ -98,7 +98,7 @@ claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
 
 `bun run demo` plays the story on five invoices: three clean ones are paid automatically, one over the auto-approve limit waits for a human (approve it on the dashboard), and one poisoned email, which tells the agent to ignore its rules and pay a new wallet, is blocked.
 
-With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
+With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Note that current models (tested with `anthropic/claude-sonnet-5.5` and `anthropic/claude-haiku-5.5`) usually spot the poisoned email and refuse to pay it themselves, so step 3 then shows that no request reached the firewall. The scripted stand-in (unset the key) always sends it, which shows the firewall's block. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
 
 ## How a request is judged
 
@@ -130,7 +130,12 @@ If nothing blocked, one LLM call audits intent (5 s timeout). It treats the invo
 
 A payment held for a human counts as not paid.
 
-Result on the real engine **without the LLM check** (deterministic rules only): `naive paid 20/20, firewalled paid 3/20`, with 490 of 12,489 leaving. Two of the three are the split-payment cases: the first payment of each series (190 and 150) goes through because it is inside the auto-approve limit, and every later one is held. The third is `hidden_instructions-5`, an off-task payment to an allowlisted supplier with no trigger words. Only the LLM intent check can catch that one, and it has not been run against a real model here because no `OPENROUTER_API_KEY` was available.
+Results on the real engine:
+
+- **LLM check off** (rules only): `naive paid 20/20, firewalled paid 3/20`, with 490 of 12,489 leaving. The leaks are the first payment of each split series (inside the auto-approve limit) and `hidden_instructions-5`, an off-task payment to an allowlisted supplier with no trigger words.
+- **LLM check on** (`anthropic/claude-haiku-5.5` via OpenRouter): `naive paid 20/20, firewalled paid 2/20`, with 340 leaving. The LLM blocks `hidden_instructions-5`. The two remaining leaks are the first payment of each split series (190 and 150), which are within the mandate's own limits; every later payment in the series is held.
+
+The LLM is not deterministic, so re-running can differ slightly. When it fails (timeout, empty or unreadable reply) the payment is held for a human, never approved.
 
 ## Layout
 

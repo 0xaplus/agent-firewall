@@ -92,6 +92,13 @@ describe("demo agent", () => {
     const out = lines.join("\n");
     for (const s of ["Step 1", "Step 2", "Step 3", "Step 4"]) expect(out).toContain(s);
     expect(out).toContain("1 paid, 1 waiting for a human, 1 blocked");
+    expect(out).not.toContain("declined it on its own");
+  });
+
+  test("recap says so when the agent never sent the poisoned request to the firewall", () => {
+    const lines: string[] = [];
+    recap([{ amount: 10, recipient: "0xa", verdict: "approved", reasons: [] }], (s) => lines.push(s));
+    expect(lines.join("\n")).toContain("declined it on its own");
   });
 });
 

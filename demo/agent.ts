@@ -202,6 +202,9 @@ export function recap(
   by("needs_approval").forEach((o) => log(`        ${describe(o)}`));
   log("Step 3  Poisoned invoice stopped");
   by("blocked").forEach((o) => log(`        ${describe(o)}`));
+  if (!by("blocked").length) {
+    log("        (nothing was blocked: no payment request for it reached the firewall, so the agent declined it on its own)");
+  }
   log(
     `Step 4  ${by("approved").length} paid, ${by("needs_approval").length} waiting for a human, ${by("blocked").length} blocked`,
   );
