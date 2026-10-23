@@ -1,9 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DEMO_AGENT_TOKEN } from "../src/fixtures";
+import { DEFAULT_MODEL, openRouterLlm } from "./openrouter";
 
 export interface Invoice { id: string; from: string; subject: string; body: string; amount: number; payTo: string }
 export interface Outcome {
@@ -127,16 +127,13 @@ async function main() {
   console.log(`Inbox: ${inbox.length} invoices. Task: pay this week's supplier invoices.\n`);
 
   let result;
-  if (process.env.ANTHROPIC_API_KEY) {
-    const model = process.env.DEMO_MODEL ?? "claude-sonnet-5-5";
-    console.log(`Agent: ${model} via MCP at ${base}\n`);
-    const anthropic = new Anthropic();
-    const llm: Llm = {
-      create: (p) => anthropic.messages.create({ model, max_tokens: 2048, ...p } as any) as unknown as Promise<any>,
-    };
+  if (process.env.OPENROUTER_API_KEY) {
+    const model = process.env.DEMO_MODEL ?? DEFAULT_MODEL;
+    console.log(`Agent: ${model} via OpenRouter, tools via MCP at ${base}\n`);
+    const llm = openRouterLlm(process.env.OPENROUTER_API_KEY, model);
     result = await runAgent(mcp, llm, inbox);
   } else {
-    console.log("Agent: scripted stand-in (ANTHROPIC_API_KEY is not set, no LLM is used)\n");
+    console.log("Agent: scripted stand-in (OPENROUTER_API_KEY is not set, no LLM is used)\n");
     result = await runScripted(mcp, inbox);
   }
   recap(result.outcomes);

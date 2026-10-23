@@ -94,3 +94,73 @@ describe("demo agent", () => {
     expect(out).toContain("1 paid, 1 waiting for a human, 1 blocked");
   });
 });
+
+import { DEFAULT_MODEL, openRouterLlm, toOpenAiMessages } from "../../demo/openrouter";
+
+describe("openrouter adapter", () => {
+  const tools = [{ name: "request_payment", description: "pay", input_schema: { type: "object", properties: {} } }];
+
+  test("converts Anthropic-style history to OpenAI chat messages", () => {
+    const out = toOpenAiMessages("sys", [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: [{ type: "text", text: "ok" }, { type: "tool_use", id: "c1", name: "request_payment", input: { amount: 5 } }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "c1", content: "{\"verdict\":\"blocked\"}" }] },
+    ]);
+    expect(out[0]).toEqual({ role: "system", content: "sys" });
+    expect(out[1]).toEqual({ role: "user", content: "hello" });
+    expect(out[2]).toMatchObject({ role: "assistant", content: "ok", tool_calls: [{ id: "c1", type: "function", function: { name: "request_payment", arguments: "{\"amount\":5}" } }] });
+    expect(out[3]).toEqual({ role: "tool", tool_call_id: "c1", content: "{\"verdict\":\"blocked\"}" });
+  });
+
+  test("sends model, key and tools to OpenRouter and maps tool calls back", async () => {
+    let seen: any;
+    const fake = async (url: string, init: any) => {
+      seen = { url, headers: init.headers, body: JSON.parse(init.body) };
+      return Response.json({ choices: [{ message: { content: "paying", tool_calls: [{ id: "c9", type: "function", function: { name: "request_payment", arguments: "{\"amount\":7}" } }] } }] });
+    };
+    const res = await openRouterLlm("sk-or-test", undefined, fake).create({ system: "s", tools, messages: [{ role: "user", content: "go" }] });
+    expect(seen.url).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(seen.headers.authorization).toBe("Bearer sk-or-test");
+    expect(seen.body.model).toBe(DEFAULT_MODEL);
+    expect(seen.body.tools[0]).toEqual({ type: "function", function: { name: "request_payment", description: "pay", parameters: tools[0]!.input_schema } });
+    expect(res.stop_reason).toBe("tool_use");
+    expect(res.content).toEqual([{ type: "text", text: "paying" }, { type: "tool_use", id: "c9", name: "request_payment", input: { amount: 7 } }]);
+  });
+
+  test("plain answer ends the turn; bad tool JSON becomes empty input", async () => {
+    const answer = openRouterLlm("k", "m", async () => Response.json({ choices: [{ message: { content: "done" } }] }));
+    expect((await answer.create({ system: "s", tools, messages: [] })).stop_reason).toBe("end_turn");
+    const bad = openRouterLlm("k", "m", async () => Response.json({ choices: [{ message: { tool_calls: [{ id: "x", function: { name: "get_spending_limits", arguments: "{oops" } }] } }] }));
+    expect((await bad.create({ system: "s", tools, messages: [] })).content).toEqual([{ type: "tool_use", id: "x", name: "get_spending_limits", input: {} }]);
+  });
+
+  test("API errors surface the provider message without the key", async () => {
+    const llm = openRouterLlm("sk-secret", "m", async () => Response.json({ error: { message: "No credits" } }, { status: 402 }));
+    await expect(llm.create({ system: "s", tools, messages: [] })).rejects.toThrow("OpenRouter 402: No credits");
+    const empty = openRouterLlm("sk-secret", "m", async () => Response.json({ choices: [] }));
+    await expect(empty.create({ system: "s", tools, messages: [] })).rejects.toThrow(/no message/);
+  });
+});
+
+describe("agent loop over the OpenRouter adapter", () => {
+  test("a scripted OpenRouter server drives real payments through MCP", async () => {
+    const inbox = loadInbox();
+    let call = 0;
+    const fakeOpenRouter = async (_url: string, init: any) => {
+      const body = JSON.parse(init.body);
+      if (call++ === 0) {
+        return Response.json({ choices: [{ message: { content: null, tool_calls: inbox.map((m, i) => ({
+          id: `c${i}`, type: "function",
+          function: { name: "request_payment", arguments: JSON.stringify({ amount: m.amount, recipient: m.payTo, purpose: m.subject, context: m.body }) },
+        })) } }] });
+      }
+      const tools = body.messages.filter((x: any) => x.role === "tool");
+      expect(tools).toHaveLength(inbox.length);
+      expect(body.tools.map((t: any) => t.function.name).sort()).toEqual(["get_payment_status", "get_spending_limits", "request_payment"]);
+      return Response.json({ choices: [{ message: { content: "3 paid, 1 pending, 1 blocked." } }] });
+    };
+    const { outcomes, summary } = await runAgent(await connect(), openRouterLlm("k", "m", fakeOpenRouter), inbox, quiet);
+    expect(outcomes.map((o) => o.verdict)).toEqual(["approved", "approved", "approved", "needs_approval", "blocked"]);
+    expect(summary).toBe("3 paid, 1 pending, 1 blocked.");
+  });
+});

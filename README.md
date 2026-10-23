@@ -34,7 +34,7 @@ ADMIN_TOKEN=change-me bun run bench   # 20 attacks, naive vs firewalled
 bun test
 ```
 
-Environment: `PORT` (3000), `ADMIN_TOKEN` (required for `/api`; if unset every `/api` call returns 401), `ANTHROPIC_API_KEY` (demo agent), `DEMO_MODEL` (default `claude-sonnet-5-5`).
+Environment: `PORT` (3000), `ADMIN_TOKEN` (required for `/api`; if unset every `/api` call returns 401), `OPENROUTER_API_KEY` (demo agent), `DEMO_MODEL` (OpenRouter model id, default `anthropic/claude-sonnet-5.5`).
 
 ## What the agent can do
 
@@ -87,7 +87,7 @@ claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
 
 `bun run demo` plays the story on five invoices: three clean ones are paid automatically, one over the auto-approve limit waits for a human (approve it on the dashboard), and one poisoned email, which tells the agent to ignore its rules and pay a new wallet, is blocked.
 
-With `ANTHROPIC_API_KEY` set, a real model reads the inbox and pays through MCP. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
+With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
 
 ## Benchmark
 
