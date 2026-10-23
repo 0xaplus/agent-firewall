@@ -176,7 +176,8 @@
         font: 13px/1.6 var(--mono); white-space: pre-wrap; word-break: break-all; color: var(--ink); }
   .copyrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .copyrow b { font-size: 15px; font-weight: 650; }
-  .copyrow button { min-height: 34px; padding: 6px 14px; font-size: 14px; }
+  .copyrow button.icon { display: inline-grid; place-items: center; width: 36px; height: 36px; min-height: 0; padding: 0; color: var(--ink-2); }
+  .copyrow button.icon.done { color: var(--ok); border-color: var(--ok); background: var(--ok-wash); }
   details.panel summary { cursor: pointer; font-size: 17px; font-weight: 650; list-style: none; display: flex; align-items: center; gap: 10px; }
   details.panel summary::-webkit-details-marker { display: none; }
   details.panel summary::before { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--ink-2); border-bottom: 2px solid var(--ink-2); transform: rotate(-45deg); transition: transform .2s var(--ease); margin-right: 4px; }
@@ -530,13 +531,29 @@ $("create").addEventListener("submit", async (e) => {
 });
 
 // ---- connect an agent ----
+const SVG = "http://www.w3.org/2000/svg";
+function icon(kind) {
+  const svg = document.createElementNS(SVG, "svg");
+  for (const [k, v] of Object.entries({ width: 18, height: 18, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", "stroke-width": 1.7, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  const shapes = kind === "check"
+    ? [["path", { d: "M4.5 10.5l3.6 3.6 7.4-8.2" }]]
+    : [["rect", { x: 7.5, y: 7.5, width: 9, height: 9, rx: 2 }], ["path", { d: "M12.5 7.5V5.5a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" }]];
+  for (const [tag, attrs] of shapes) {
+    const el = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    svg.append(el);
+  }
+  return svg;
+}
 async function copy(text, btn) {
-  try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
-  catch { const r = document.createRange(); r.selectNodeContents(btn.closest(".snip").querySelector("pre")); getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = "Selected: press copy"; }
-  setTimeout(() => (btn.textContent = "Copy"), 1800);
+  let label = "Copied";
+  try { await navigator.clipboard.writeText(text); }
+  catch { const r = document.createRange(); r.selectNodeContents(btn.closest(".snip").querySelector("pre")); getSelection().removeAllRanges(); getSelection().addRange(r); label = "Selected: press copy"; }
+  btn.replaceChildren(icon("check")); btn.setAttribute("aria-label", label); btn.title = label; btn.classList.add("done");
+  setTimeout(() => { btn.replaceChildren(icon("copy")); btn.setAttribute("aria-label", "Copy to clipboard"); btn.title = "Copy to clipboard"; btn.classList.remove("done"); }, 1800);
 }
 function snippet(title, text) {
-  const btn = h("button", { class: "ghost", type: "button" }, "Copy");
+  const btn = h("button", { class: "ghost icon", type: "button", "aria-label": "Copy to clipboard", title: "Copy to clipboard" }, icon("copy"));
   btn.addEventListener("click", () => copy(text, btn));
   return h("div", { class: "snip" }, h("div", { class: "copyrow" }, h("b", {}, title), btn), h("pre", {}, text));
 }
