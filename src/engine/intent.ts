@@ -61,6 +61,7 @@ export async function checkIntent(llm: IntentLlm, input: IntentInput, timeoutMs 
       ],
     };
   } catch (err) {
+    if (!ac.signal.aborted) console.warn(`intent check failed: ${err instanceof Error ? err.message : String(err)}`);
     const unreadable = err instanceof z.ZodError || err instanceof SyntaxError || (err as Error)?.message === "no JSON in reply";
     return unavailable(ac.signal.aborted ? "timed out" : unreadable ? "unreadable reply" : "error");
   } finally {
