@@ -1,12 +1,280 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Spend Firewall</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spend Firewall</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #2a313c; --text: #e6edf3; --muted: #8b949e;
+    --green: #3fb950; --amber: #d29922; --red: #f85149;
+    --green-bg: #12301b; --amber-bg: #3a2c0b; --red-bg: #3d1417;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+           padding: 18px 28px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 26px; letter-spacing: .3px; }
+  h2 { margin: 0 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .live { color: var(--muted); font-size: 14px; }
+  .live::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--green); margin-right: 8px; }
+  .live.down::before { background: var(--red); }
+  main { padding: 24px 28px; display: grid; gap: 20px; max-width: 1280px; margin: 0 auto; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .counters { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+  .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; }
+  .counter .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+  .counter .value { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .counter.big { grid-column: span 2; }
+  .counter.blocked { border-color: var(--red); background: var(--red-bg); }
+  .counter.blocked .value { color: var(--red); font-size: 44px; }
+  .counter.settled .value { color: var(--green); font-size: 44px; }
+  .counts { display: flex; gap: 22px; }
+  .counts b { font-size: 26px; font-variant-numeric: tabular-nums; }
+  .cols { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr); gap: 20px; }
+  @media (max-width: 860px) { .cols { grid-template-columns: 1fr; } .counter.big { grid-column: auto; } }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; }
+  dt { color: var(--muted); } dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .name { font-size: 20px; font-weight: 600; } .task { color: var(--muted); margin: 4px 0 14px; }
+  .bar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; margin: 14px 0 4px; }
+  .bar > div { height: 100%; background: var(--green); width: 0; transition: width .4s; }
+  .bar-label { color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; font-size: 14px; }
+  .empty { color: var(--muted); padding: 8px 0; }
+  .pending { display: grid; gap: 12px; }
+  .pend { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+          border: 1px solid var(--amber); background: var(--amber-bg); border-radius: 10px; padding: 14px 16px; }
+  .pend .amt { font-size: 24px; font-weight: 700; }
+  .pend .meta { color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .pend .why { margin-top: 6px; font-size: 14px; color: #f0c674; }
+  .btns { display: flex; gap: 10px; }
+  button { font: inherit; font-weight: 700; border: 0; border-radius: 8px; padding: 12px 26px; cursor: pointer; color: #fff; }
+  button.approve { background: #238636; } button.deny { background: #b62324; }
+  button:disabled { opacity: .5; cursor: wait; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #58a6ff; outline-offset: 2px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; padding: 6px 10px; }
+  td { padding: 10px; border-top: 1px solid var(--line); vertical-align: top; font-variant-numeric: tabular-nums; }
+  td.amt { font-weight: 700; white-space: nowrap; }
+  td .sub { color: var(--muted); font-size: 13px; }
+  .reasons { color: #ff9b95; font-size: 14px; margin-top: 4px; }
+  .reasons.amber { color: #f0c674; }
+  .badge { display: inline-block; border-radius: 6px; padding: 2px 10px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .badge.approved { background: var(--green-bg); color: var(--green); }
+  .badge.needs_approval { background: var(--amber-bg); color: var(--amber); }
+  .badge.blocked { background: var(--red-bg); color: var(--red); }
+  .st { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  a { color: #58a6ff; }
+  tr.new td { animation: hl 1.6s ease-out; }
+  tr.new.v-blocked td { animation: flash 1.6s ease-out; }
+  @keyframes hl { from { background: #1f3a5f; } to { background: transparent; } }
+  @keyframes flash { 0%, 40% { background: #6b1c20; } 100% { background: transparent; } }
+  @media (prefers-reduced-motion: reduce) { tr.new td { animation: none; } }
+  #banner { display: none; background: var(--red-bg); border: 1px solid var(--red); border-radius: 10px; padding: 12px 18px; }
+  #banner.show { display: block; }
+  #login { display: none; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #login.show { display: flex; }
+  input { font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 260px; }
+  .scroll { overflow-x: auto; }
+  main > *, .cols > * { min-width: 0; }
+  @media (max-width: 520px) { main { padding: 16px; } header { padding: 14px 16px; } .pend { grid-template-columns: 1fr; } input { min-width: 0; width: 100%; } }
+</style>
 </head>
 <body>
+<header>
   <h1>Spend Firewall</h1>
-  <p>Dashboard coming soon (B4).</p>
+  <span class="live" id="live">connecting…</span>
+</header>
+<main>
+  <div id="banner" role="alert"></div>
+  <form id="login" class="panel">
+    <label for="tok">Admin token</label>
+    <input id="tok" type="password" autocomplete="off" placeholder="ADMIN_TOKEN">
+    <button class="approve" type="submit">Connect</button>
+  </form>
+
+  <section class="counters" aria-label="Totals">
+    <div class="counter settled big"><div class="label">Amount settled</div><div class="value" id="c-settled">–</div></div>
+    <div class="counter blocked big"><div class="label">Amount blocked</div><div class="value" id="c-blocked">–</div></div>
+    <div class="counter"><div class="label">Payments</div>
+      <div class="counts">
+        <span><b id="n-approved">0</b><br><span class="sub">approved</span></span>
+        <span><b id="n-pending">0</b><br><span class="sub">pending</span></span>
+        <span><b id="n-blocked">0</b><br><span class="sub">blocked</span></span>
+      </div></div>
+  </section>
+
+  <div class="cols">
+    <section class="panel" aria-label="Mandate">
+      <h2>Mandate</h2>
+      <div id="mandate"><div class="empty">Loading…</div></div>
+    </section>
+    <section class="panel" aria-label="Pending approvals">
+      <h2>Pending approvals</h2>
+      <div class="pending" id="pending"><div class="empty">Nothing waiting.</div></div>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Live feed">
+    <h2>Live feed</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Time</th><th>Amount</th><th>Recipient / purpose</th><th>Verdict</th><th>Risk</th><th>Receipt</th></tr></thead>
+        <tbody id="feed"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="feed-empty">No payment requests yet.</div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const params = new URLSearchParams(location.search);
+// The token lives in memory only: read it from the URL once, then scrub it from the address bar.
+let token = params.get("token") || "";
+const mandateId = params.get("mandate") || "mdt_ada";
+if (params.has("token")) { params.delete("token"); history.replaceState(null, "", location.pathname + (params.size ? "?" + params : "")); }
+
+const $ = (id) => document.getElementById(id);
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") el.className = v; else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null) el.append(kid);
+  return el;
+}
+const fmt = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const money = (n, cur) => cur ? `${fmt(n)} ${cur}` : fmt(n);
+const short = (a) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+
+let mandate = null, currency = "", seen = null, lastPayments = [];
+const busy = new Set();
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(body.error || `HTTP ${res.status}`); e.status = res.status; throw e; }
+  return body;
+}
+
+function who(address) {
+  const r = mandate && mandate.allowlist.find((x) => x.address === address);
+  return r ? { label: r.label, sub: short(address) } : { label: short(address), sub: "not on allowlist" };
+}
+const failed = (p) => p.checks.filter((c) => !c.pass).map((c) => c.reason);
+
+function renderCounters(s) {
+  $("c-settled").textContent = money(s.settledAmount, currency);
+  $("c-blocked").textContent = money(s.blockedAmount, currency);
+  $("n-approved").textContent = s.approved;
+  $("n-pending").textContent = s.needsApproval;
+  $("n-blocked").textContent = s.blocked;
+}
+
+function renderMandate(m, s) {
+  const spent = s.settledAmount, cap = m.monthlyCap;
+  const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
+  $("mandate").replaceChildren(
+    h("div", { class: "name" }, m.name + (m.status === "revoked" ? " (revoked)" : "")),
+    h("div", { class: "task" }, m.task),
+    h("dl", {},
+      h("dt", {}, "Currency"), h("dd", {}, m.currency),
+      h("dt", {}, "Auto-approve up to"), h("dd", {}, money(m.autoApproveMax, m.currency)),
+      h("dt", {}, "Hard limit"), h("dd", {}, money(m.hardMax, m.currency)),
+      h("dt", {}, "Monthly cap"), h("dd", {}, money(cap, m.currency)),
+    ),
+    h("div", { class: "bar", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": cap, "aria-valuenow": spent },
+      h("div", { style: `width:${pct}%` })),
+    h("div", { class: "bar-label" }, h("span", {}, `Settled ${money(spent, m.currency)}`), h("span", {}, `Remaining ${money(Math.max(0, cap - spent), m.currency)}`)),
+    h("div", { class: "chips" }, m.allowlist.map((r) => h("span", { class: "chip", title: r.address }, r.label))),
+  );
+}
+
+async function decide(id, action, btns) {
+  if (busy.has(id)) return;
+  busy.add(id); btns.forEach((b) => (b.disabled = true));
+  try { await api(`/api/payments/${encodeURIComponent(id)}/${action}`, { method: "POST" }); showError(""); }
+  catch (e) { showError(`Could not ${action} payment: ${e.message}`); }
+  finally { busy.delete(id); await refresh(); }
+}
+
+function renderPending(payments) {
+  const pend = payments.filter((p) => p.status === "pending_approval");
+  if (!pend.length) { $("pending").replaceChildren(h("div", { class: "empty" }, "Nothing waiting.")); return; }
+  $("pending").replaceChildren(...pend.map((p) => {
+    const w = who(p.recipient);
+    const approve = h("button", { class: "approve", type: "button" }, "Approve");
+    const deny = h("button", { class: "deny", type: "button" }, "Deny");
+    const btns = [approve, deny];
+    approve.addEventListener("click", () => decide(p.id, "approve", btns));
+    deny.addEventListener("click", () => decide(p.id, "deny", btns));
+    return h("div", { class: "pend" },
+      h("div", {},
+        h("div", { class: "amt" }, money(p.amount, p.currency)),
+        h("div", { class: "meta" }, `${w.label} · ${p.purpose}`),
+        failed(p).length ? h("div", { class: "why" }, failed(p).join(" · ")) : null),
+      h("div", { class: "btns" }, approve, deny));
+  }));
+}
+
+const VERDICT = { approved: "Approved", needs_approval: "Needs approval", blocked: "Blocked" };
+const STATUS = { pending_approval: "waiting for a human", settling: "settling", settled: "settled", blocked: "", denied: "denied by a human", failed: "settlement failed" };
+
+function renderFeed(payments) {
+  const fresh = new Set(seen ? payments.filter((p) => !seen.has(p.id)).map((p) => p.id) : []);
+  $("feed-empty").style.display = payments.length ? "none" : "";
+  $("feed").replaceChildren(...payments.map((p) => {
+    const w = who(p.recipient);
+    const reasons = failed(p);
+    const receipt = p.receiptUrl ? h("a", { href: p.receiptUrl, target: "_blank", rel: "noopener noreferrer" }, "view")
+      : p.reference ? h("span", { title: p.reference }, short(p.reference)) : "";
+    const tr = h("tr", { class: fresh.has(p.id) ? `new v-${p.verdict === "blocked" ? "blocked" : "other"}` : "" },
+      h("td", {}, new Date(p.createdAt).toLocaleTimeString()),
+      h("td", { class: "amt" }, money(p.amount, p.currency)),
+      h("td", {},
+        h("div", {}, w.label, " ", h("span", { class: "sub" }, w.sub)),
+        h("div", { class: "sub" }, p.purpose),
+        reasons.length ? h("div", { class: `reasons ${p.verdict === "blocked" ? "" : "amber"}` }, reasons.join(" · ")) : null),
+      h("td", {}, h("span", { class: `badge ${p.verdict}` }, VERDICT[p.verdict] || p.verdict),
+        STATUS[p.status] && p.verdict !== "blocked" ? h("div", { class: "st" }, STATUS[p.status]) : null),
+      h("td", {}, p.risk),
+      h("td", {}, receipt));
+    return tr;
+  }));
+  seen = new Set(payments.map((p) => p.id));
+}
+
+function showError(msg) { $("banner").textContent = msg; $("banner").classList.toggle("show", !!msg); }
+function setLive(ok, text) { const el = $("live"); el.textContent = text; el.classList.toggle("down", !ok); }
+
+let inFlight = false;
+async function refresh() {
+  if (!token) { $("login").classList.add("show"); setLive(false, "not connected"); return; }
+  if (inFlight) return;
+  inFlight = true;
+  try {
+    const q = `?mandateId=${encodeURIComponent(mandateId)}`;
+    const [m, stats, payments] = await Promise.all([
+      api(`/api/mandates/${encodeURIComponent(mandateId)}`), api(`/api/stats${q}`), api(`/api/payments${q}`)]);
+    mandate = m; currency = m.currency; lastPayments = payments;
+    $("login").classList.remove("show");
+    showError("");
+    renderCounters(stats); renderMandate(m, stats); renderPending(payments); renderFeed(payments);
+    setLive(true, `live · updated ${new Date().toLocaleTimeString()}`);
+  } catch (e) {
+    if (e.status === 401) { token = ""; $("login").classList.add("show"); showError("Admin token rejected. Enter it again."); setLive(false, "not connected"); }
+    else { showError(`Dashboard error: ${e.message}`); setLive(false, "disconnected"); }
+  } finally { inFlight = false; }
+}
+
+$("login").addEventListener("submit", (e) => { e.preventDefault(); token = $("tok").value.trim(); $("tok").value = ""; refresh(); });
+refresh();
+setInterval(refresh, 2000);
+</script>
 </body>
 </html>
