@@ -21,6 +21,7 @@ Mandates are currency- and rail-agnostic: every limit is in the mandate's curren
 
 1. **Sign in.** Open the dashboard with your admin token. On a fresh database it opens on "New mandate"; if you ran `bun run seed` it opens on the demo mandate.
 2. **Create a mandate.** Name, what the agent is for, a currency, an auto-approve limit, a hard limit, a monthly cap, and who may be paid (an address and a label each). You can add as many mandates as you like and switch between them from the header; the list is remembered in this browser.
+   Or describe the rules in plain English ("Naira only, up to ₦50,000 without asking me, never more than ₦300,000, ₦1,000,000 a month, pay Lagos Textiles at 0123456789") and press **Draft rules**: a model fills the form, and notes say what it left empty and why. A recipient is kept only if its address appears in your text, so addresses are never invented; impossible limits (auto-approve above the hard limit, hard limit above the cap) are left for you to set. Nothing is saved until you check the form and press Create. Needs `OPENROUTER_API_KEY`.
 3. **Connect an agent.** Right after creating a mandate, the dashboard shows the MCP endpoint and the agent's token as ready-to-paste snippets for Claude Code, Claude Desktop and any other MCP client. "Connect an agent" on the mandate card shows them again.
 4. **Let the agent work.** Everything it asks for is approved, held or blocked. The top line shows what has been paid out and what has been stopped.
 5. **Decide.** Held payments appear under "Waiting for you" with the reason, and Approve or Deny settles or rejects them. Every request, blocked ones included, is in Activity with the reasons in plain English.
@@ -55,7 +56,7 @@ Environment:
 | `ADMIN_TOKEN` | – | required for `/api`; if unset every `/api` call returns 401 |
 | `DB_PATH` | `firewall.db` | SQLite file (`:memory:` for throwaway runs) |
 | `SETTLER` | `mock` | settlement rail (`mock` today) |
-| `OPENROUTER_API_KEY` | – | turns on the LLM intent check and the LLM demo agent |
+| `OPENROUTER_API_KEY` | – | turns on the LLM intent check, drafting rules from plain English, and the LLM demo agent |
 | `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check ($0.10/M in, $0.50/M out; `openai/gpt-4.1-mini` and `google/gemini-2.5-flash` also work but cost more) |
 | `DEMO_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the demo agent |
 
@@ -85,6 +86,7 @@ There is no tool to read or edit mandate rules. Mandates change only through the
 All routes need `Authorization: Bearer $ADMIN_TOKEN`. Errors are `{ "error": "…" }` (400 bad input, 401, 404, 405, 409 wrong state, 500).
 
 - `POST /api/mandates`, `GET /api/mandates/:id`, `POST /api/mandates/:id/revoke`
+- `POST /api/mandates/draft` with `{ text }`: returns `{ draft, notes }` drafted from plain English and creates nothing (503 without `OPENROUTER_API_KEY`)
 - `GET /api/payments?mandateId=`
 - `POST /api/payments/:id/approve`, `POST /api/payments/:id/deny` (only while `pending_approval`)
 - `GET /api/stats?mandateId=`
@@ -168,6 +170,8 @@ src/core.ts            the real Core, wired from env
 src/core.factory.ts    createCore(deps) / createCoreFromEnv()
 src/db.ts              SQLite schema + queries
 src/payments.ts        payment lifecycle: every status change (open, settle, approve, deny, deny on revoke)
+src/schema.ts          zod schema for a new mandate (REST and drafts)
+src/compile.ts         drafts a mandate from plain-English rules (never saves)
 src/errors.ts          CoreError: not_found / wrong_state, mapped to 404 / 409
 src/seed.ts            demo mandate
 src/engine/            rules.ts, risk.ts, intent.ts, evaluate.ts
