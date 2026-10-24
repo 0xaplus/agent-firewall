@@ -237,8 +237,15 @@ describe("wiring", () => {
     const m = c.createMandate(INPUT);
     expect((await c.requestPayment(m.id, { amount: 10, recipient: LAGOS, purpose: "x" })).status).toBe("settled");
   });
-  test("createCoreFromEnv refuses an unknown or unfinished settler instead of silently using mock", () => {
-    expect(() => createCoreFromEnv({ DB_PATH: ":memory:", SETTLER: "payfrom" })).toThrow(/not implemented/);
-    expect(() => createCoreFromEnv({ DB_PATH: ":memory:", SETTLER: "wat" })).toThrow(/Unknown SETTLER/);
+  test("createCoreFromEnv refuses an unkeyed or unknown settler instead of silently using mock", () => {
+    // The real .env may hold PAYFROM_API_KEY; the test env must not see it.
+    const saved: Record<string, string | undefined> = {};
+    for (const k of Object.keys(process.env).filter((k) => k.startsWith("PAYFROM"))) {
+      saved[k] = process.env[k]; delete process.env[k];
+    }
+    try {
+      expect(() => createCoreFromEnv({ DB_PATH: ":memory:", SETTLER: "payfrom" })).toThrow(/needs PAYFROM_API_KEY/);
+      expect(() => createCoreFromEnv({ DB_PATH: ":memory:", SETTLER: "wat" })).toThrow(/Unknown SETTLER/);
+    } finally { Object.assign(process.env, saved); }
   });
 });
