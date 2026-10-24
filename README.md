@@ -23,7 +23,7 @@ Mandates are currency- and rail-agnostic: every limit is in the mandate's curren
 2. **Create a mandate.** Name, what the agent is for, a currency, an auto-approve limit, a hard limit, a monthly cap, and who may be paid (an address and a label each). Each mandate is one agent with its own budget and rules; you can add as many as you like and switch between them from the header.
    Or describe the rules in plain English ("Naira only, up to ₦50,000 without asking me, never more than ₦300,000, ₦1,000,000 a month, pay Lagos Textiles at 0123456789") and press **Draft rules**: a model fills the form, and notes say what it left empty and why. A recipient is kept only if its address appears in your text, so addresses are never invented; impossible limits (auto-approve above the hard limit, hard limit above the cap) are left for you to set. Nothing is saved until you check the form and press Create. Needs `OPENROUTER_API_KEY`.
 3. **Connect an agent.** Right after creating a mandate, the dashboard shows the MCP endpoint and the agent's token as ready-to-paste snippets for Claude Code, Claude Desktop and any other MCP client. "Connect an agent" on the mandate card shows them again.
-4. **See all your agents.** With two or more mandates the dashboard opens on **All agents**: one card per agent with its status (active, revoked or expired), this month's spend against its cap (bar plus percentage), what is left, how many payments are waiting for you (tap to jump to them), how many were blocked this month, and the last activity. Totals are shown per currency, never added across currencies. Click a card for that agent's full view.
+4. **See all your agents.** With two or more mandates the dashboard opens on **All agents**: one card per agent with its status (active, revoked or expired), this month's spend against its cap (bar plus percentage), what is left, how many payments are waiting for you (tap to jump to them), how many were blocked this month, and the last activity. Totals are shown per currency, never added across currencies. Click a card for that agent's full view. From 80% of an agent's monthly cap its card shows an amber "82% of monthly budget used" badge, and a red "Monthly budget used up" at 100%; with Telegram set up you also get one message per agent per month when it first reaches 80%. These are notices only: the monthly cap rule already blocks payments over the cap.
 5. **Let the agent work.** Everything it asks for is approved, held or blocked. The top line shows what has been paid out and what has been stopped.
 6. **Decide.** Held payments appear under "Waiting for you" with the reason, and Approve or Deny settles or rejects them. Every request, blocked ones included, is in Activity with the reasons in plain English.
 7. **Test without an agent.** "Test the firewall" sends a real request as the agent, with presets for a clean invoice, over the limit, an unknown recipient and a prompt injection.
@@ -39,7 +39,16 @@ bun run seed                          # demo mandate + agent token, into firewal
 ADMIN_TOKEN=change-me bun run dev     # http://localhost:3000
 ```
 
-Open `http://localhost:3000/?token=change-me`. The token is read once and removed from the address bar. It is kept in `sessionStorage`: a refresh keeps you signed in, closing the tab signs you out, and so does the Sign out button. `bun run seed` creates two demo mandates, both in the dashboard's mandate switcher: `mdt_ada` in USDC (200 auto-approve / 1000 hard / 2000 monthly, four allowlisted suppliers, agent token `agt_demo_ada`), and `mdt_lagos` in NGN for a Lagos business (₦50,000 / ₦300,000 / ₦1,000,000, four Lagos suppliers with placeholder account numbers, agent token `agt_demo_lagos`). The demo and the bench use the USDC one.
+Open `http://localhost:3000/?token=change-me`. The token is read once and removed from the address bar. It is kept in `sessionStorage`: a refresh keeps you signed in, closing the tab signs you out, and so does the Sign out button. `bun run seed` creates four example agents (mandates), as a user with several agents would have; all appear under **All agents**. Seeding twice is safe.
+
+| Agent | Id / agent token | Currency | Auto-approve / hard / monthly |
+|---|---|---|---|
+| Ada Imports — ops agent (the demo and bench use this one) | `mdt_ada` / `agt_demo_ada` | USDC | 200 / 1,000 / 2,000 |
+| Lagos procurement agent | `mdt_lagos` / `agt_demo_lagos` | NGN | 50,000 / 300,000 / 1,000,000 |
+| Cloud infrastructure agent | `mdt_cloud` / `agt_demo_cloud` | USD | 150 / 800 / 2,500 |
+| Research subscriptions agent | `mdt_research` / `agt_demo_research` | USD | 30 / 100 / 300 |
+
+Recipient addresses in the examples are placeholders.
 
 In another terminal:
 
@@ -73,7 +82,7 @@ The owner gets held payments on their phone, in Telegram, and decides them there
 2. Start the server (`bun run dev`) and send `/start` to your new bot. It replies with your chat id.
 3. Put it in `.env` as `TELEGRAM_CHAT_ID=…` and restart the server. `/start` now replies "Connected".
 
-When a payment is held you get a message naming the agent, the amount, the recipient and why it was held, with **Approve** and **Deny** buttons. Tapping one goes through the same checks as the dashboard (monthly cap, expiry, revoke), and the message is edited to the outcome: approved and settled with its reference, denied, not paid with the reason, or already decided elsewhere (on the dashboard, or by a revoke). Blocked payments, such as the poisoned invoice, arrive as an info message without buttons (`TELEGRAM_NOTIFY_BLOCKED=0` turns these off). Approved payments send nothing.
+When a payment is held you get a message naming the agent, the amount, the recipient and why it was held, with **Approve** and **Deny** buttons. Tapping one goes through the same checks as the dashboard (monthly cap, expiry, revoke), and the message is edited to the outcome: approved and settled with its reference, denied, not paid with the reason, or already decided elsewhere (on the dashboard, or by a revoke). Blocked payments, such as the poisoned invoice, arrive as an info message without buttons (`TELEGRAM_NOTIFY_BLOCKED=0` turns these off). Approved payments send nothing. When an agent first reaches 80% of its monthly budget in a month, you get one warning message, for example "⚠️ Cloud infrastructure agent has used 82% of its monthly budget (2,050 of 2,500 USD)."
 
 Only `TELEGRAM_CHAT_ID` can decide; taps and `/start` from other chats are ignored and logged. Messages are plain text. If Telegram is down or misconfigured, the firewall works exactly as before and the module keeps retrying in the background; nothing is ever approved because of a Telegram failure. Payment details (amounts, supplier names) pass through Telegram's servers.
 
@@ -210,6 +219,7 @@ src/db.ts              SQLite schema + queries
 src/payments.ts        payment lifecycle: every status change (open, settle, approve, deny, deny on revoke)
 src/schema.ts          zod schema for a new mandate (REST and drafts)
 src/compile.ts         drafts a mandate from plain-English rules (never saves)
+src/budget.ts          budget warnings at 80% and 100% of the monthly cap
 src/telegram.ts        Telegram approvals: notifications, Approve / Deny buttons, long polling
 src/audit.ts           hash-chained audit log: appendAudit, verifyAudit
 src/errors.ts          CoreError: not_found / wrong_state, mapped to 404 / 409
