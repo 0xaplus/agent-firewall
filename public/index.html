@@ -95,6 +95,10 @@
   .grid .wide { grid-column: 1 / -1; }
   .row { display: grid; grid-template-columns: 2.2fr 1.3fr 1fr auto; gap: 12px; margin-bottom: 12px; align-items: end; }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+  .draft { display: grid; gap: 12px; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+  .draft-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .notes { margin: 0; padding: 12px 16px 12px 34px; border: 1px solid var(--warn-line); background: var(--warn-wash); border-radius: 10px; color: var(--warn); font-weight: 500; }
+  .notes.ok { list-style: none; padding-left: 16px; border-color: var(--ok); background: var(--ok-wash); color: var(--ok); }
 
   /* ---- messages ---- */
   #banner { display: none; background: var(--bad-wash); border: 1px solid var(--bad-line); color: var(--bad); border-radius: 10px; padding: 12px 16px; font-weight: 500; }
@@ -252,6 +256,14 @@
   <form id="create" class="panel" hidden>
     <h2>New mandate</h2>
     <p class="hint" id="create-hint">A mandate is the budget and the rules for one agent. The agent can spend only inside it and can never change it. One mandate uses one currency.</p>
+    <div class="draft">
+      <label>Describe the rules in plain English<textarea id="rules-text" placeholder="My agent pays my weekly supplier invoices. Up to 50,000 a payment without asking me, never more than 300,000 in one payment, 1,000,000 a month. Pay Lagos Textiles at 0123456789."></textarea></label>
+      <div class="draft-row">
+        <button type="button" class="ghost" id="draft-btn">Draft rules</button>
+        <span class="sub">The draft fills the form below. Nothing is saved until you check it and press Create mandate.</span>
+      </div>
+      <ul class="notes" id="draft-notes" aria-live="polite" hidden></ul>
+    </div>
     <div class="grid">
       <label>Name<input name="name" required placeholder="Ops agent"></label>
       <label>Currency<input name="currency" required placeholder="Currency code"></label>
@@ -505,6 +517,32 @@ function addRow(r = {}) {
   $("rows").append(row);
 }
 $("add-row").addEventListener("click", () => addRow());
+
+// ---- draft the rules from plain English (nothing is saved until Create) ----
+function fillForm(d) {
+  const set = (name, v) => { $("create").querySelector(`.grid [name=${name}]`).value = v ?? ""; };
+  for (const k of ["name", "task", "currency", "autoApproveMax", "hardMax", "monthlyCap"]) set(k, d[k]);
+  set("expiresAt", d.expiresAt ? d.expiresAt.slice(0, 10) : "");
+  $("rows").replaceChildren();
+  (d.allowlist && d.allowlist.length ? d.allowlist : [{}]).forEach((r) => addRow(r));
+}
+function showNotes(notes) {
+  const ul = $("draft-notes");
+  ul.classList.toggle("ok", !notes.length);
+  ul.replaceChildren(...(notes.length ? notes : ["Draft ready. Check every field, then press Create mandate."]).map((n) => h("li", {}, n)));
+  ul.hidden = false;
+}
+$("draft-btn").addEventListener("click", async () => {
+  const text = $("rules-text").value.trim();
+  if (!text) return showError("Describe the rules first.");
+  const btn = $("draft-btn");
+  btn.disabled = true; btn.textContent = "Drafting…";
+  try {
+    const { draft, notes } = await api("/api/mandates/draft", { method: "POST", body: JSON.stringify({ text }) });
+    fillForm(draft); showNotes(notes); showError("");
+  } catch (err) { showError(`Could not draft the rules: ${err.message}`); }
+  finally { btn.disabled = false; btn.textContent = "Draft rules"; }
+});
 $("new-btn").addEventListener("click", () => { $("create-hint").textContent = CREATE_HINT; $("create").hidden = false; if (!$("rows").children.length) addRow(); $("create").scrollIntoView({ behavior: "smooth" }); });
 $("cancel-create").addEventListener("click", () => { $("create").hidden = true; if (!mandateId) setNoMandate(true); });
 
@@ -531,7 +569,7 @@ $("create").addEventListener("submit", async (e) => {
     }) });
     showError("");
     remember(m); mandateId = m.id; seen = null;
-    e.target.reset(); $("rows").replaceChildren(); $("create").hidden = true;
+    e.target.reset(); $("rows").replaceChildren(); $("draft-notes").hidden = true; $("create").hidden = true;
     await refresh();
     showConnect(m);
   } catch (err) { showError(`Could not create the mandate: ${err.message}`); }

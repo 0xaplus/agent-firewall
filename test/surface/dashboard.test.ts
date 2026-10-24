@@ -24,6 +24,11 @@ describe("dashboard page", () => {
     expect(html).toContain("/revoke");
     expect(html).toContain("claude mcp add");
   });
+  test("can draft the rules from plain English, and still needs Create to save them", () => {
+    for (const id of ["rules-text", "draft-btn", "draft-notes"]) expect(html).toContain(`id="${id}"`);
+    expect(html).toContain("/api/mandates/draft");
+    expect(html).toContain("Nothing is saved until you check it and press Create mandate.");
+  });
   test("never sends the admin token anywhere but same-origin API calls", () => {
     expect(html).not.toMatch(/https?:\/\/(?!localhost|www\.w3\.org)/);
     expect(html).toContain("sessionStorage.setItem(TOKEN_KEY");

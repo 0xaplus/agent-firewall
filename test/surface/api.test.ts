@@ -155,3 +155,44 @@ describe("routing", () => {
     expect(JSON.stringify(await res.json())).not.toContain("secret");
   });
 });
+
+import { compileMandate, drafterFromEnv } from "../../src/compile";
+
+describe("drafting a mandate from plain English", () => {
+  const TEXT = "Naira only. Up to 50000 without asking, never more than 300000, 1000000 a month. Pay Lagos Textiles at 0123456789.";
+  const REPLY = JSON.stringify({ name: "Suppliers", task: "Pay supplier invoices.", currency: "NGN", autoApproveMax: 50000, hardMax: 300000,
+    monthlyCap: 1000000, recipients: [{ label: "Lagos Textiles", address: "0123456789", category: "supplier" }], expiresOn: null });
+  const drafter = (text: string) => compileMandate({ complete: async () => REPLY }, text);
+  const post = (body: unknown, c: Core = core, d: typeof drafter | null = drafter, token = "test") =>
+    handleApi(new Request("http://x/api/mandates/draft", { method: "POST", headers: { authorization: `Bearer ${token}` },
+      body: typeof body === "string" ? body : JSON.stringify(body) }), c, d);
+
+  test("returns the draft and notes, and touches nothing in the core", async () => {
+    const calls: string[] = [];
+    const spy = new Proxy(core, { get: (t, k) => { calls.push(String(k)); return (t as any)[k]; } });
+    const res = await post({ text: TEXT }, spy);
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.notes).toEqual([]);
+    expect(body.draft).toMatchObject({ currency: "NGN", autoApproveMax: 50000, allowlist: [{ address: "0123456789" }] });
+    expect(calls).toEqual([]);
+    expect(core.listPayments()).toEqual([]);
+  });
+
+  test("without a model it is 503 with a clear message", async () => {
+    const res = await post({ text: TEXT }, core, null);
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as any).error).toContain("OPENROUTER_API_KEY");
+  });
+
+  test("bad bodies are 400, other methods 405, no admin token 401", async () => {
+    for (const body of [{}, { text: "" }, { text: "x".repeat(4001) }, "{nope"]) expect((await post(body)).status).toBe(400);
+    expect((await handleApi(new Request("http://x/api/mandates/draft", { headers: { authorization: "Bearer test" } }), core, drafter)).status).toBe(405);
+    expect((await post({ text: TEXT }, core, drafter, "nope")).status).toBe(401);
+  });
+
+  test("the drafter comes from OPENROUTER_API_KEY, and is off without it", () => {
+    expect(drafterFromEnv({})).toBeNull();
+    expect(typeof drafterFromEnv({ OPENROUTER_API_KEY: "k" })).toBe("function");
+  });
+});
