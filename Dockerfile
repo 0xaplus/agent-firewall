@@ -1,4 +1,4 @@
-# Spend Firewall: one Bun process serving the dashboard, the REST API and the MCP endpoint.
+# Agent Firewall: one Bun process serving the dashboard, the REST API and the MCP endpoint.
 FROM oven/bun:1
 WORKDIR /app
 

@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Spend Firewall</title>
+<title>Agent Firewall</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='7' fill='%23232a36'/%3E%3Cpath d='M6 14h9M12 9.5l4.5 4.5-4.5 4.5' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M21 7v14' stroke='%236b8cff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
-  /* Spend Firewall: a clearance board. Each payment request is a strip on a board; the colour of its
+  /* Agent Firewall: a clearance board. Each payment request is a strip on a board; the colour of its
      holder says cleared (paid), holding (waiting for you) or refused (blocked). One type family. */
   :root {
     color-scheme: light;
@@ -370,8 +370,8 @@
 <header class="top">
   <div class="wrap topbar">
     <div class="brand">
-      <svg width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="Spend Firewall"><rect width="28" height="28" rx="7" style="fill: var(--logo)"/><path d="M6 14h9M12 9.5l4.5 4.5-4.5 4.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 7v14" stroke="#6b8cff" stroke-width="3" stroke-linecap="round"/></svg>
-      <span>Spend Firewall</span>
+      <svg width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="Agent Firewall"><rect width="28" height="28" rx="7" style="fill: var(--logo)"/><path d="M6 14h9M12 9.5l4.5 4.5-4.5 4.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 7v14" stroke="#6b8cff" stroke-width="3" stroke-linecap="round"/></svg>
+      <span>Agent Firewall</span>
     </div>
     <span class="crumb" id="view-name" hidden></span>
     <div class="hdr">
@@ -811,7 +811,7 @@ function renderPending(payments) {
   $("main").classList.toggle("haspending", pend.length > 0);
   const total = pend.length;
   $("waiting-sub").textContent = total ? `${total} payment${total === 1 ? "" : "s"} held for your decision` : "";
-  document.title = total ? `(${total}) Spend Firewall` : "Spend Firewall";
+  document.title = total ? `(${total}) Agent Firewall` : "Agent Firewall";
   if (!total) { $("pending").replaceChildren(h("div", { class: "empty panel" }, "Nothing waiting for you. Payments over a limit or flagged by a check will appear here.")); return; }
   $("pending").replaceChildren(...pend.map((p) => {
     const w = who(p);
@@ -1127,8 +1127,8 @@ function showConnect(m) {
   const auth = `Bearer ${m.agentToken}`;
   $("connect-body").replaceChildren(
     h("p", { class: "hint" }, `Give your agent this endpoint and token. It will see three tools: request_payment, get_payment_status and get_spending_limits. Nothing that can change the rules for "${m.name}".`),
-    snippet("Claude Code (run in a terminal)", `claude mcp add --transport http spend-firewall ${url} --header "Authorization: ${auth}"`),
-    snippet("Claude Desktop (claude_desktop_config.json)", JSON.stringify({ mcpServers: { "spend-firewall": { command: "npx", args: ["mcp-remote", url, "--header", `Authorization: ${auth}`] } } }, null, 2)),
+    snippet("Claude Code (run in a terminal)", `claude mcp add --transport http agent-firewall ${url} --header "Authorization: ${auth}"`),
+    snippet("Claude Desktop (claude_desktop_config.json)", JSON.stringify({ mcpServers: { "agent-firewall": { command: "npx", args: ["mcp-remote", url, "--header", `Authorization: ${auth}`] } } }, null, 2)),
     snippet("Any other MCP client (Streamable HTTP)", `URL:    ${url}\nHeader: Authorization: ${auth}`));
   $("connect").hidden = false;
   $("connect").scrollIntoView({ behavior: "smooth" });
@@ -1269,7 +1269,7 @@ async function refresh(force = false) {
       offline = true;
       if (!loaded) setView("loading");
       showError(e.status ? `The server answered with an error (${e.message}). Showing the last data; retrying every 2 seconds.`
-        : "Can't reach the Spend Firewall server. Showing the last data; retrying every 2 seconds.");
+        : "Can't reach the Agent Firewall server. Showing the last data; retrying every 2 seconds.");
     }
     renderLive();
   } finally { inFlight = false; }

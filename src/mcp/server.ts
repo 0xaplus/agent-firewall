@@ -30,13 +30,13 @@ function describePayment(p: Payment) {
 
 // One server per request, bound to the mandate the Bearer token maps to.
 export function createMcpServer(core: Core, mandateId: string): McpServer {
-  const server = new McpServer({ name: "spend-firewall", version: "0.1.0" });
+  const server = new McpServer({ name: "agent-firewall", version: "0.1.0" });
 
   server.registerTool(
     "request_payment",
     {
       description:
-        "Ask the spend firewall to make a payment. Returns a verdict (approved, needs_approval or blocked) " +
+        "Ask the agent firewall to make a payment. Returns a verdict (approved, needs_approval or blocked) " +
         "with the reasons. Amounts are in the mandate's currency.",
       inputSchema: {
         amount: z
