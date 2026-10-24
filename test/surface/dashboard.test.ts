@@ -24,6 +24,10 @@ describe("dashboard page", () => {
     expect(html).toContain("/revoke");
     expect(html).toContain("claude mcp add");
   });
+  test("shows whether the audit log verifies", () => {
+    expect(html).toContain('id="audit"');
+    expect(html).toContain("/api/audit/verify");
+  });
   test("never sends the admin token anywhere but same-origin API calls", () => {
     expect(html).not.toMatch(/https?:\/\/(?!localhost|www\.w3\.org)/);
     expect(html).toContain("sessionStorage.setItem(TOKEN_KEY");

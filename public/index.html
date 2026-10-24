@@ -112,6 +112,8 @@
   .statement-line .bad { color: var(--bad); }
   .statement-sub { margin: 14px 0 0; color: var(--ink-2); font-size: 16px; }
   .statement-sub span { font-weight: 650; color: var(--ink); }
+  .audit { margin: 8px 0 0; font-size: 14px; color: var(--ok); font-weight: 500; }
+  .audit.broken { color: var(--bad); }
 
   /* ---- waiting for you ---- */
   .pending { display: grid; gap: 12px; }
@@ -281,6 +283,7 @@
   <section class="statement" aria-label="Totals">
     <p class="statement-line">Paid out <b class="ok" id="c-settled">–</b> and stopped <b class="bad" id="c-blocked">–</b></p>
     <p class="statement-sub"><span id="n-approved">0</span> approved · <span id="n-pending">0</span> waiting for you · <span id="n-blocked">0</span> blocked</p>
+    <p class="audit" id="audit" role="status" hidden></p>
   </section>
 
   <section id="waiting" aria-label="Pending approvals">
@@ -450,6 +453,13 @@ function renderFeed(payments) {
     return tr;
   }));
   seen = new Set(payments.map((p) => p.id));
+}
+
+function renderAudit(a) {
+  const el = $("audit");
+  el.hidden = false;
+  el.classList.toggle("broken", !a.ok);
+  el.textContent = a.ok ? `✓ Audit log verified · ${a.entries} entries, hash-chained` : `✗ Audit log broken at entry ${a.brokenAt}: a record was changed or deleted`;
 }
 
 function showError(msg) { $("banner").textContent = msg; $("banner").classList.toggle("show", !!msg); }
@@ -653,8 +663,9 @@ async function refresh() {
     $("signout").hidden = false;
     if (!mandateId) { $("login").classList.remove("show"); renderSelector(); setNoMandate(true); setLive(true, "connected · no mandate yet"); return; }
     const q = `?mandateId=${encodeURIComponent(mandateId)}`;
-    const [m, stats, payments] = await Promise.all([
-      api(`/api/mandates/${encodeURIComponent(mandateId)}`), api(`/api/stats${q}`), api(`/api/payments${q}`)]);
+    const [m, stats, payments, audit] = await Promise.all([
+      api(`/api/mandates/${encodeURIComponent(mandateId)}`), api(`/api/stats${q}`), api(`/api/payments${q}`), api("/api/audit/verify")]);
+    renderAudit(audit);
     const wasEmpty = !mandate;
     mandate = m; currency = m.currency; lastPayments = payments;
     remember(m); renderSelector(); setNoMandate(false);
