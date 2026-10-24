@@ -125,6 +125,9 @@
   .pend .meta { color: var(--ink-2); margin-top: 2px; }
   .pend .why { margin-top: 8px; font-size: 14px; color: var(--warn); font-weight: 500; max-width: 70ch; }
   .btns { display: flex; gap: 10px; }
+  .newflag { margin-left: 10px; vertical-align: 2px; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 650; background: var(--warn); color: #fff; }
+  .pend.fresh { animation: ring 1.2s var(--ease) 2; }
+  @keyframes ring { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 0 6px var(--warn-line); } }
   .btns button { min-width: 108px; min-height: 44px; }
 
   /* ---- layout: activity + mandate ---- */
@@ -212,7 +215,10 @@
     .row { grid-template-columns: 1fr 1fr; }
     .row > label:first-child { grid-column: 1 / -1; }
     .pend { grid-template-columns: 1fr; padding: 16px; }
-    .btns button { flex: 1; }
+    .btns button { flex: 1; min-height: 52px; font-size: 16px; }
+    /* On a phone, a payment waiting for a decision comes first. */
+    main.haspending #banner { order: -2; }
+    main.haspending #waiting { order: -1; }
     thead { display: none; }
     tbody tr { display: grid; grid-template-columns: 1fr auto auto; column-gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
     tbody tr:first-child { border-top: 0; }
@@ -226,7 +232,7 @@
     td:nth-child(6) { grid-column: 3; grid-row: 3; margin-top: 10px; font-size: 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    tr.new td { animation: none; }
+    tr.new td, .pend.fresh { animation: none; }
     * { transition-duration: .01ms !important; }
   }
 </style>
@@ -296,7 +302,7 @@
   </section>
 
   <section id="waiting" aria-label="Pending approvals">
-    <h2>Waiting for you</h2>
+    <h2>Waiting for you<span class="newflag" id="newflag" role="status" hidden>New</span></h2>
     <div class="pending" id="pending"><div class="empty">Nothing waiting.</div></div>
   </section>
 
@@ -418,8 +424,34 @@ async function decide(id, action, btns) {
   finally { busy.delete(id); await refresh(); }
 }
 
+// A short beep when a payment starts waiting. Browsers allow sound only after the first tap on the page.
+let audio = null;
+const unlockAudio = () => { try { audio = audio || new AudioContext(); audio.resume(); } catch { /* no sound: the banner still shows */ } };
+document.addEventListener("pointerdown", unlockAudio, { once: true });
+function beep() {
+  if (!audio || audio.state !== "running") return;
+  const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+  o.frequency.value = 880;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.2, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+  o.connect(g).connect(audio.destination);
+  o.start(t); o.stop(t + 0.4);
+}
+let flagTimer = null;
+function announceNew() {
+  $("newflag").hidden = false;
+  clearTimeout(flagTimer);
+  flagTimer = setTimeout(() => { $("newflag").hidden = true; }, 8000);
+  beep();
+}
+
 function renderPending(payments) {
   const pend = payments.filter((p) => p.status === "pending_approval");
+  const arrived = new Set(seen ? pend.filter((p) => !seen.has(p.id)).map((p) => p.id) : []);
+  if (arrived.size) announceNew();
+  $("main").classList.toggle("haspending", pend.length > 0);
+  document.title = pend.length ? `(${pend.length}) Spend Firewall` : "Spend Firewall";
   if (!pend.length) { $("pending").replaceChildren(h("div", { class: "empty" }, "Nothing waiting.")); return; }
   $("pending").replaceChildren(...pend.map((p) => {
     const w = who(p.recipient);
@@ -428,7 +460,7 @@ function renderPending(payments) {
     const btns = [approve, deny];
     approve.addEventListener("click", () => decide(p.id, "approve", btns));
     deny.addEventListener("click", () => decide(p.id, "deny", btns));
-    return h("div", { class: "pend" },
+    return h("div", { class: arrived.has(p.id) ? "pend fresh" : "pend" },
       h("div", {},
         h("div", { class: "amt" }, money(p.amount, p.currency)),
         h("div", { class: "meta" }, `${w.label} · ${p.purpose}`),

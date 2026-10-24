@@ -60,6 +60,14 @@ Environment:
 | `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check ($0.10/M in, $0.50/M out; `openai/gpt-4.1-mini` and `google/gemini-2.5-flash` also work but cost more) |
 | `DEMO_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the demo agent |
 
+## Approve from a phone
+
+The server listens on all network interfaces, and at startup it prints the address a phone on the same Wi-Fi or hotspot can open (`On your network: http://192.168.…:3000/`). Open `http://<that address>:3000/?token=<ADMIN_TOKEN>` on the phone. When a payment is waiting, it is the first thing on the page, with large Approve and Deny buttons. A new waiting payment shows a "New" flag, puts the count in the tab title, and beeps once you have tapped the page (browsers only allow sound after a tap).
+
+Running under WSL2: the printed address is on WSL's virtual network, which a phone can't reach. The startup log then explains the two fixes: turn on mirrored networking, or forward the port from Windows with `netsh interface portproxy`, then use the Windows machine's Wi-Fi address.
+
+Anyone on the same network can reach the server, but `/api` still needs the admin token and `/mcp` an agent token.
+
 ## Check the claims yourself
 
 ```bash
