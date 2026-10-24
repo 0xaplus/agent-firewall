@@ -119,6 +119,27 @@ describe("deciding a held payment", () => {
   });
 });
 
+describe("deciding a held payment after the mandate expired", () => {
+  test("it is denied on approval, with the reason, and never paid", async () => {
+    const expiring = { ...DEMO_MANDATE, id: "mdt_exp", agentToken: "agt_exp", expiresAt: "2026-11-01T00:00:00Z" };
+    insertMandate(db, expiring);
+    const p = stored("pending_approval", { mandateId: expiring.id });
+    deps.now = () => new Date("2026-12-01T00:00:00Z");
+    const done = await approvePayment(deps, p.id);
+    expect([done.status, done.reference]).toEqual(["denied", undefined]);
+    expect(done.checks.at(-1)!.reason).toContain("expired on 2026-11-01");
+    expect(sent).toEqual([]);
+  });
+
+  test("before the expiry date it is paid as usual", async () => {
+    const expiring = { ...DEMO_MANDATE, id: "mdt_exp", agentToken: "agt_exp", expiresAt: "2026-11-01T00:00:00Z" };
+    insertMandate(db, expiring);
+    const p = stored("pending_approval", { mandateId: expiring.id });
+    deps.now = () => new Date("2026-10-20T00:00:00Z");
+    expect((await approvePayment(deps, p.id)).status).toBe("settled");
+  });
+});
+
 describe("denyPending", () => {
   test("denies every held payment of one mandate, with the reason, and touches nothing else", () => {
     const other = { ...DEMO_MANDATE, id: "mdt_other", agentToken: "agt_other" };

@@ -172,6 +172,21 @@ describe("revoking a mandate", () => {
   });
 });
 
+describe("an expired mandate", () => {
+  test("a payment held before the mandate expired cannot be paid after it expires", async () => {
+    const { id: _i, agentToken: _t, status: _s, ...input } = DEMO_MANDATE;
+    const m = core.createMandate({ ...input, expiresAt: new Date(Date.now() + 300).toISOString() });
+    const a = await agent(m.agentToken);
+    const p = await a.pay(500, LAGOS);
+    expect(p.verdict).toBe("needs_approval");
+    await Bun.sleep(400);
+    expect((await a.pay(10, KANO)).verdict).toBe("blocked");
+    const after = await (await human("POST", `/api/payments/${p.paymentId}/approve`)).json() as any;
+    expect([after.status, after.reference]).toEqual(["denied", undefined]);
+    expect(after.checks.at(-1).reason).toContain("expired");
+  });
+});
+
 describe("the AI intent check can only make a verdict stricter", () => {
   const reply = (v: object) => JSON.stringify({ aligned: true, injectionSuspected: false, score: 0, reason: "ok", ...v });
 
