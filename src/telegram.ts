@@ -84,8 +84,17 @@ const amount = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits:
 export const budgetAlertText = (m: Mandate, l: Limits, n: BudgetNotice) =>
   `⚠️ ${m.name} has used ${n.pct}% of its monthly budget (${amount(l.spentThisMonth)} of ${amount(l.monthlyCap)} ${l.currency}).`;
 
+// A link to the payment on the chain's explorer, once it has settled and the rail gave one.
+const receiptLine = (p: Payment) => (p.status === "settled" && p.receiptUrl ? [`🧾 Receipt: ${p.receiptUrl}`] : []);
+
 const decidedText = (p: Payment, m: Mandate | null, how: "approved" | "denied" | "elsewhere") =>
-  [outcomeLine(p, how), ...summary(p, m), `ID: ${p.id}`].join("\n");
+  [outcomeLine(p, how), ...summary(p, m), ...receiptLine(p), `ID: ${p.id}`].join("\n");
+
+// A payment the firewall approved on its own and that settled: no decision needed, just the receipt.
+export function paidText(p: Payment, m: Mandate | null): string {
+  const [line, agent] = summary(p, m);
+  return [`✅ Paid${p.reference ? `. Ref ${short(p.reference)}` : ""}`, line, `For: ${cut(p.purpose, 200)}`, agent, ...receiptLine(p), `ID: ${p.id}`].join("\n");
+}
 
 const keyboard = (id: string) => ({ inline_keyboard: [[{ text: "Approve", callback_data: `a:${id}` }, { text: "Deny", callback_data: `d:${id}` }]] });
 
@@ -97,6 +106,7 @@ export interface TelegramOptions {
   api: TelegramApi;
   chatId: string | null;           // null: setup mode, only answers /start with the chat id
   notifyBlocked?: boolean;
+  notifyPaid?: boolean;            // also report payments approved without you, with their receipt
   now?: () => Date;
   log?: (msg: string) => void;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
@@ -111,6 +121,7 @@ const realSleep = (ms: number, signal: AbortSignal) =>
 export function createTelegram(opts: TelegramOptions) {
   const { core, db, api, chatId } = opts;
   const notifyBlocked = opts.notifyBlocked ?? true;
+  const notifyPaid = opts.notifyPaid ?? true;
   const log = opts.log ?? ((m: string) => console.warn(m));
   const sleep = opts.sleep ?? realSleep;
   const now = opts.now ?? (() => new Date());
@@ -143,12 +154,13 @@ export function createTelegram(opts: TelegramOptions) {
         if (!rec) {
           const held = p.status === "pending_approval";
           const blocked = notifyBlocked && p.verdict === "blocked" && p.createdAt >= startedAt;
-          if (!held && !blocked) continue;
+          const paid = notifyPaid && p.verdict === "approved" && p.status === "settled" && p.createdAt >= startedAt;
+          if (!held && !blocked && !paid) continue;
           const m = held ? fresh(p.mandateId) : mandateOf(p.mandateId);
           const sent = await api.call("sendMessage", held
             ? { chat_id: chatId, text: heldText(p, m), reply_markup: keyboard(p.id) }
-            : { chat_id: chatId, text: blockedText(p, m) });
-          insertTelegramMessage(db, { paymentId: p.id, chatId, messageId: sent.message_id, kind: held ? "held" : "blocked", final: !held, createdAt: new Date().toISOString() });
+            : { chat_id: chatId, text: blocked ? blockedText(p, m) : paidText(p, m) });
+          insertTelegramMessage(db, { paymentId: p.id, chatId, messageId: sent.message_id, kind: held ? "held" : blocked ? "blocked" : "paid", final: !held, createdAt: new Date().toISOString() });
         } else if (!rec.final && p.status !== "pending_approval") {
           await edit(rec.chatId, rec.messageId, decidedText(p, mandateOf(p.mandateId), "elsewhere"));
           markTelegramFinal(db, p.id);
@@ -279,5 +291,5 @@ export function startTelegramFromEnv(core: Core, db: Database, env: Record<strin
   const chatId = env.TELEGRAM_CHAT_ID?.trim() || null;
   log(chatId ? "Telegram approvals on: held payments go to your Telegram chat."
     : "Telegram setup mode: send /start to your bot to get your chat id, then set TELEGRAM_CHAT_ID and restart.");
-  return startTelegram({ core, db, api: telegramApi(token), chatId, notifyBlocked: env.TELEGRAM_NOTIFY_BLOCKED !== "0", log });
+  return startTelegram({ core, db, api: telegramApi(token), chatId, notifyBlocked: env.TELEGRAM_NOTIFY_BLOCKED !== "0", notifyPaid: env.TELEGRAM_NOTIFY_PAID !== "0", log });
 }

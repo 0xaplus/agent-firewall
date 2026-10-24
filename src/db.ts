@@ -168,7 +168,7 @@ export function historyTo(db: Database, mandateId: string, recipient: string): n
 
 // ---- telegram messages: one per notified payment, so restarts don't resend ----
 
-export interface TelegramMessage { paymentId: string; chatId: string; messageId: number; kind: "held" | "blocked"; final: boolean; createdAt: string }
+export interface TelegramMessage { paymentId: string; chatId: string; messageId: number; kind: "held" | "blocked" | "paid"; final: boolean; createdAt: string }
 
 const toTelegramMessage = (r: any): TelegramMessage => ({
   paymentId: r.payment_id, chatId: r.chat_id, messageId: r.message_id, kind: r.kind, final: r.final === 1, createdAt: r.created_at,
