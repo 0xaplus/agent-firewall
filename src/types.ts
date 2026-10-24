@@ -82,6 +82,7 @@ export interface Core {
   // human side (REST / dashboard)
   createMandate(input: NewMandate): Mandate;
   getMandate(id: string): Mandate | null;
+  listMandates(): Mandate[];                     // every mandate (agent), newest first
   revokeMandate(id: string): Mandate;
   listPayments(mandateId?: string): Payment[];   // newest first
   approvePayment(id: string): Promise<Payment>;  // only from pending_approval; settles

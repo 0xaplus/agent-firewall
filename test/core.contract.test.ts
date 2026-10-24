@@ -88,6 +88,12 @@ describe("Core: human side", () => {
     const p = await core.requestPayment(m.id, { amount: 50, recipient: "NG-0012-3456", purpose: "x" });
     expect([p.verdict, p.status, p.currency]).toEqual(["approved", "settled", "NGN"]);
   });
+  test("listMandates: every mandate, newest first", () => {
+    const a = core.createMandate({ ...INPUT, name: "A" });
+    const b = core.createMandate({ ...INPUT, name: "B", currency: "NGN" });
+    expect(core.listMandates().map((m) => m.id)).toEqual([b.id, a.id, DEMO_MANDATE.id]);
+    expect(core.listMandates()[0]).toEqual(b);
+  });
   test("getMandate: found / null", () => {
     expect(core.getMandate(DEMO_MANDATE.id)).toEqual(DEMO_MANDATE);
     expect(core.getMandate("mdt_nope")).toBeNull();

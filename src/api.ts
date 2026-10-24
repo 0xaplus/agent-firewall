@@ -27,8 +27,13 @@ export async function handleApi(req: Request, core: Core, drafter: Drafter | nul
   try {
     let m: RegExpMatchArray | null;
 
+    if (path === "/api/mandates" && req.method === "GET") {
+      // The agent token is shown only at creation and under "Connect an agent", never in the list.
+      return json(core.listMandates().map(({ agentToken: _token, ...m }) => m));
+    }
+
     if (path === "/api/mandates") {
-      const bad = allow("POST");
+      const bad = allow("GET", "POST");
       if (bad) return bad;
       let raw: unknown;
       try { raw = await req.json(); } catch { return fail(400, "Body must be valid JSON"); }
@@ -57,6 +62,12 @@ export async function handleApi(req: Request, core: Core, drafter: Drafter | nul
       if (bad) return bad;
       const mandate = core.getMandate(decodeURIComponent(m[1]!));
       return mandate ? json(mandate) : fail(404, "Mandate not found");
+    }
+
+    if ((m = path.match(/^\/api\/mandates\/([^/]+)\/limits$/))) {
+      const bad = allow("GET");
+      if (bad) return bad;
+      return json(core.getLimits(decodeURIComponent(m[1]!)));
     }
 
     if ((m = path.match(/^\/api\/mandates\/([^/]+)\/revoke$/))) {

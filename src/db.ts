@@ -74,6 +74,11 @@ export function getMandateByToken(db: Database, token: string): Mandate | null {
   return r ? toMandate(r) : null;
 }
 
+// Newest first (by insertion order).
+export function listMandates(db: Database): Mandate[] {
+  return db.query("SELECT * FROM mandates ORDER BY rowid DESC").all().map(toMandate);
+}
+
 export function setMandateStatus(db: Database, id: string, status: Mandate["status"]): void {
   db.query("UPDATE mandates SET status = ? WHERE id = ?").run(status, id);
 }
