@@ -103,6 +103,14 @@ bun test test/surface/promises.test.ts
 
 No API key, no network, no running server. Each test name is one promise this README makes (the agent cannot change its rules, a revoked token is refused, split payments are held, the AI check can only make a verdict stricter, and so on), checked end to end on the real firewall: an MCP client talks to `/mcp` and a human talks to `/api`. The AI intent check is tested with a fake model, so results are the same on every run. `bun test` runs everything.
 
+## Deploy (Render)
+
+The repo has a `Dockerfile` and a `render.yaml` blueprint. In Render: **New + → Blueprint**, pick this repository and branch, and apply. Render builds the image, generates a random `ADMIN_TOKEN` (copy it from the service's **Environment** tab), and asks for the optional `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Then open `https://<your-service>.onrender.com/?token=<ADMIN_TOKEN>`, and point agents at `https://<your-service>.onrender.com/mcp`.
+
+On Render's free plan the service sleeps after 15 minutes without traffic (the next request takes about a minute to wake it, and Telegram is paused while it sleeps), and the disk is not kept: the database starts empty on every restart. The container seeds the demo agents each time it starts, so the demo always works from a clean state. Open the URL a few minutes before demoing. Use a different Telegram bot from the one on your laptop: two servers polling the same bot fight over its messages.
+
+The seeded agent tokens (`agt_demo_ada` and so on) are in this repository, so anyone can send requests as those demo agents to a public deployment. Settlement is a mock, so no real money can move; create your own mandates for anything else.
+
 ## What the agent can do
 
 Three MCP tools, authenticated by the agent's Bearer token (one token = one mandate; unknown token = 401):
