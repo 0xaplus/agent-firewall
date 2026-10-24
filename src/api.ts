@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { budgetNotice } from "./budget";
 import { drafterFromEnv, type Drafter } from "./compile";
 import { CoreError } from "./errors";
 import { NewMandateBody, nonEmpty } from "./schema";
@@ -67,7 +68,8 @@ export async function handleApi(req: Request, core: Core, drafter: Drafter | nul
     if ((m = path.match(/^\/api\/mandates\/([^/]+)\/limits$/))) {
       const bad = allow("GET");
       if (bad) return bad;
-      return json(core.getLimits(decodeURIComponent(m[1]!)));
+      const limits = core.getLimits(decodeURIComponent(m[1]!));
+      return json({ ...limits, budget: budgetNotice(limits.spentThisMonth, limits.monthlyCap) });
     }
 
     if ((m = path.match(/^\/api\/mandates\/([^/]+)\/revoke$/))) {

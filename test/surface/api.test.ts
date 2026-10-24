@@ -227,7 +227,8 @@ describe("listing agents", () => {
   test("GET /api/mandates/:id/limits returns this month's spend; unknown is 404", async () => {
     await pay(120);
     const res = await call("GET", `/api/mandates/${DEMO_MANDATE.id}/limits`);
-    expect(await res.json()).toMatchObject({ currency: "USDC", monthlyCap: 2000, spentThisMonth: 120, remaining: 1880 });
+    expect(await res.json()).toMatchObject({ currency: "USDC", monthlyCap: 2000, spentThisMonth: 120, remaining: 1880,
+      budget: { pct: 6, level: "ok", text: null } });
     expect((await call("GET", "/api/mandates/mdt_nope/limits")).status).toBe(404);
     expect((await call("POST", `/api/mandates/${DEMO_MANDATE.id}/limits`)).status).toBe(405);
   });

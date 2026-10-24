@@ -216,6 +216,9 @@
   .agent button.waiting { background: var(--warn-wash); border-color: var(--warn-line); color: var(--warn); min-height: 40px; }
   .agent button.waiting:hover { border-color: var(--warn); }
   .agent .calm { color: var(--ink-3); font-size: 14px; }
+  .budget { display: inline-block; margin-top: 8px; border-radius: 6px; padding: 2px 10px; font-size: 13px; font-weight: 650;
+            background: var(--warn-wash); color: var(--warn); border: 1px solid var(--warn-line); }
+  .budget.full { background: var(--bad-wash); color: var(--bad); border-color: var(--bad-line); }
   .totals { color: var(--ink-2); margin: 0 0 18px; }
   .totals b { color: var(--ink); font-weight: 650; }
   main.allagents .statement, main.allagents #waiting, main.allagents .layout, main.allagents #tryit { display: none; }
@@ -425,12 +428,13 @@ function renderCounters(s, payments) {
   $("n-blocked").textContent = s.blocked;
 }
 
-function renderMandate(m, s) {
+function renderMandate(m, s, limits) {
   const spent = s.settledAmount, cap = m.monthlyCap;
   const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
   $("mandate").replaceChildren(
     h("div", { class: "name" }, m.name + (m.status === "revoked" ? " (revoked)" : "")),
     h("div", { class: "task" }, m.task),
+    budgetBadge(limits && limits.budget),
     h("dl", {},
       h("dt", {}, "Currency"), h("dd", {}, m.currency),
       h("dt", {}, "Auto-approve up to"), h("dd", {}, money(m.autoApproveMax, m.currency)),
@@ -563,13 +567,16 @@ function agentSummary(m, limits, payments, now) {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const mine = payments.filter((p) => p.mandateId === m.id);
   return {
-    m, state: stateOf(m, now), spent: limits.spentThisMonth, cap: limits.monthlyCap, remaining: limits.remaining,
+    m, state: stateOf(m, now), spent: limits.spentThisMonth, cap: limits.monthlyCap, remaining: limits.remaining, budget: limits.budget,
     pct: limits.monthlyCap > 0 ? Math.round((limits.spentThisMonth / limits.monthlyCap) * 100) : 0,
     waiting: mine.filter((p) => p.status === "pending_approval").length,
     blocked: mine.filter((p) => p.verdict === "blocked" && p.createdAt >= monthStart).length,
     last: mine[0]?.createdAt ?? null,
   };
 }
+
+// Amber at 80% of the monthly cap, red when used up; always with text, never colour alone.
+const budgetBadge = (b) => b && b.text ? h("span", { class: `budget ${b.level}`, role: "status" }, b.text) : null;
 
 function agentCard(a) {
   const open = () => switchTo(a.m.id);
@@ -583,7 +590,8 @@ function agentCard(a) {
         h("div", { style: `width:${Math.min(100, a.pct)}%` })),
       h("div", { class: "bar-label" },
         h("span", {}, `${money(a.spent, a.m.currency)} of ${money(a.cap, a.m.currency)} this month · ${a.pct}%`),
-        h("span", {}, `${money(a.remaining, a.m.currency)} left`))),
+        h("span", {}, `${money(a.remaining, a.m.currency)} left`)),
+      budgetBadge(a.budget)),
     h("div", { class: "side" },
       a.waiting
         ? h("button", { class: "waiting", type: "button", onclick: (e) => { e.stopPropagation(); scrollToWaiting = true; open(); } },
@@ -821,13 +829,14 @@ async function refresh() {
     }
     setAllView(false);
     const q = `?mandateId=${encodeURIComponent(mandateId)}`;
-    const [m, stats, payments, audit] = await Promise.all([
-      api(`/api/mandates/${encodeURIComponent(mandateId)}`), api(`/api/stats${q}`), api(`/api/payments${q}`), api("/api/audit/verify")]);
+    const [m, stats, payments, audit, limits] = await Promise.all([
+      api(`/api/mandates/${encodeURIComponent(mandateId)}`), api(`/api/stats${q}`), api(`/api/payments${q}`), api("/api/audit/verify"),
+      api(`/api/mandates/${encodeURIComponent(mandateId)}/limits`)]);
     renderAudit(audit);
     const wasEmpty = !mandate;
     mandate = m; currency = m.currency; lastPayments = payments;
     showError("");
-    renderCounters(stats, payments); renderMandate(m, stats); renderPending(payments); renderFeed(payments);
+    renderCounters(stats, payments); renderMandate(m, stats, limits); renderPending(payments); renderFeed(payments);
     if (wasEmpty) renderTry(m);
     if (scrollToWaiting) { scrollToWaiting = false; $("waiting").scrollIntoView({ behavior: "smooth" }); }
     setLive(true, `live · updated ${new Date().toLocaleTimeString()}`);
