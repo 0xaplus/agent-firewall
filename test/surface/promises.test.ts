@@ -159,6 +159,17 @@ describe("revoking a mandate", () => {
     expect((await human("POST", `/api/payments/${p.paymentId}/approve`)).status).toBe(409);
     expect(log[0].reference).toBeUndefined();
   });
+
+  test("revoking a mandate while the AI check runs stops that payment", async () => {
+    const llm = { complete: async () => {
+      await human("POST", `/api/mandates/${DEMO_MANDATE.id}/revoke`);
+      return JSON.stringify({ aligned: true, injectionSuspected: false, score: 0, reason: "ok" });
+    } };
+    core = testCore({ llm });
+    const p = await (await agent()).pay(100, LAGOS);
+    expect([p.verdict, p.status, p.reference]).toEqual(["blocked", "blocked", undefined]);
+    expect(p.reasons.join(" ")).toContain("revoked");
+  });
 });
 
 describe("the AI intent check can only make a verdict stricter", () => {

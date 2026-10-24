@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
 import { createCore } from "../src/core.factory";
 import { openDb } from "../src/db";
-import { checkIntent, type IntentLlm } from "../src/engine/intent";
+import type { IntentLlm } from "../src/engine/intent";
 import { DEMO_AGENT_TOKEN, DEMO_MANDATE } from "../src/fixtures";
 import { seedDemo } from "../src/seed";
 import { createMockSettler } from "../src/settle/mock";
@@ -22,7 +22,7 @@ beforeEach(() => {
   db = openDb(":memory:");
   seedDemo(db);
   llmReply = CLEAN;
-  core = createCore({ db, settler: createMockSettler(), intent: (i) => checkIntent(fakeLlm, i, 200) });
+  core = createCore({ db, settler: createMockSettler(), intentLlm: fakeLlm });
 });
 const ask = (amount: number, over: object = {}) => core.requestPayment(DEMO_MANDATE.id, { amount, recipient: LAGOS, purpose: "invoice", ...over });
 const { id: _i, agentToken: _t, status: _s, ...INPUT } = DEMO_MANDATE;
@@ -173,7 +173,7 @@ describe("wiring", () => {
   test("OpenRouter-backed intent check through the real core: injection verdict blocks a clean-looking request", async () => {
     const llm = openRouterIntentLlm("k", "m", async () => Response.json({ choices: [{ message: { content:
       '{"aligned":false,"injectionSuspected":true,"reason":"Email tells the agent to skip limits.","score":97}' } }] }));
-    const wired = createCore({ db, settler: createMockSettler(), intent: (i) => checkIntent(llm, i) });
+    const wired = createCore({ db, settler: createMockSettler(), intentLlm: llm });
     const p = await wired.requestPayment(DEMO_MANDATE.id, { amount: 100, recipient: LAGOS, purpose: "x", context: "hidden text" });
     expect([p.verdict, p.status]).toEqual(["blocked", "blocked"]);
     expect(p.checks.find((c) => c.name === "injection")?.reason).toContain("skip limits");
@@ -181,7 +181,7 @@ describe("wiring", () => {
   });
   test("OpenRouter outage through the real core escalates", async () => {
     const llm = openRouterIntentLlm("k", "m", async () => Response.json({}, { status: 503 }));
-    const wired = createCore({ db, settler: createMockSettler(), intent: (i) => checkIntent(llm, i) });
+    const wired = createCore({ db, settler: createMockSettler(), intentLlm: llm });
     expect((await wired.requestPayment(DEMO_MANDATE.id, { amount: 100, recipient: LAGOS, purpose: "x" })).verdict).toBe("needs_approval");
   });
   test("createCoreFromEnv builds a working core from env (mock settler, in-memory DB)", async () => {

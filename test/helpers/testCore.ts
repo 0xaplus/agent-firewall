@@ -1,6 +1,6 @@
 import { createCore } from "../../src/core.factory";
 import { openDb } from "../../src/db";
-import { checkIntent, type IntentLlm } from "../../src/engine/intent";
+import type { IntentLlm } from "../../src/engine/intent";
 import { seedDemo } from "../../src/seed";
 import { createMockSettler } from "../../src/settle/mock";
 import type { Core } from "../../src/types";
@@ -9,8 +9,7 @@ import type { Core } from "../../src/types";
 export function testCore(opts: { llm?: IntentLlm } = {}): Core {
   const db = openDb(":memory:");
   seedDemo(db);
-  const { llm } = opts;
-  return createCore({ db, settler: createMockSettler(), intent: llm ? (input) => checkIntent(llm, input, 200) : undefined });
+  return createCore({ db, settler: createMockSettler(), intentLlm: opts.llm });
 }
 
 export const llmReplying = (reply: string | Error): IntentLlm => ({

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Check } from "../types";
+import type { Check, Mandate, PaymentRequest } from "../types";
 
 export const INTENT_TIMEOUT_MS = 5000;
 
@@ -11,9 +11,6 @@ export const SYSTEM_PROMPT =
   "score is risk from 0 (clearly legitimate) to 100 (clearly malicious). " +
   "reason is one plain-English sentence of at most 20 words.";
 
-export interface IntentInput {
-  task: string; purpose: string; recipientLabel: string; amount: number; currency: string; context?: string;
-}
 export interface IntentLlm {
   complete(args: { system: string; user: string; signal: AbortSignal }): Promise<string>;
 }
@@ -38,16 +35,17 @@ const unavailable = (why: string): IntentResult => ({
 });
 
 // Can only make a verdict stricter: it adds checks, never removes or overrides any.
-// Any failure (timeout, bad output, API error) escalates.
-export async function checkIntent(llm: IntentLlm, input: IntentInput, timeoutMs = INTENT_TIMEOUT_MS): Promise<IntentResult> {
+// Never throws: any failure (timeout, bad output, API error) holds the payment for a human.
+export async function checkIntent(llm: IntentLlm, mandate: Mandate, req: PaymentRequest, timeoutMs = INTENT_TIMEOUT_MS): Promise<IntentResult> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
-  const user = JSON.stringify({
-    task: input.task, purpose: input.purpose, recipient: input.recipientLabel,
-    amount: `${input.amount} ${input.currency}`,
-    context: (input.context ?? "").slice(0, MAX_CONTEXT),
-  });
   try {
+    const user = JSON.stringify({
+      task: mandate.task, purpose: req.purpose,
+      recipient: mandate.allowlist.find((r) => r.address === req.recipient)?.label ?? "unknown",
+      amount: `${req.amount} ${mandate.currency}`,
+      context: (req.context ?? "").slice(0, MAX_CONTEXT),
+    });
     const timeout = new Promise<never>((_, reject) => ac.signal.addEventListener("abort", () => reject(new Error("timed out"))));
     const v = parse(await Promise.race([llm.complete({ system: SYSTEM_PROMPT, user, signal: ac.signal }), timeout]));
     const score = Math.max(0, Math.min(100, Math.round(v.score)));

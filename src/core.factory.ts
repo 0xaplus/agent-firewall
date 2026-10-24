@@ -2,7 +2,7 @@ import { getMandate, getMandateByToken, getPayment, insertMandate, listPayments,
 import { evaluate, type EvalDeps } from "./engine/evaluate";
 import { CoreError } from "./errors";
 import { approvePayment, denyPayment, denyPending } from "./payments";
-import { checkIntent, DEFAULT_INTENT_MODEL, openRouterIntentLlm } from "./engine/intent";
+import { DEFAULT_INTENT_MODEL, openRouterIntentLlm } from "./engine/intent";
 import { createSettler } from "./settle";
 import type { Core, Limits, Mandate, NewMandate, Stats } from "./types";
 
@@ -74,12 +74,7 @@ export function createCore(deps: EvalDeps): Core {
 // Production wiring from the environment. Intent check runs only when an OpenRouter key is set.
 export function createCoreFromEnv(env: Record<string, string | undefined> = process.env): Core {
   const key = env.OPENROUTER_API_KEY;
-  let intent: EvalDeps["intent"];
-  if (key) {
-    const llm = openRouterIntentLlm(key, env.INTENT_MODEL ?? DEFAULT_INTENT_MODEL);
-    intent = (input) => checkIntent(llm, input);
-  } else {
-    console.warn("OPENROUTER_API_KEY not set: the LLM intent check is OFF (deterministic rules only).");
-  }
-  return createCore({ db: openDb(env.DB_PATH ?? "firewall.db"), settler: createSettler(env.SETTLER ?? "mock"), intent });
+  if (!key) console.warn("OPENROUTER_API_KEY not set: the LLM intent check is OFF (deterministic rules only).");
+  const intentLlm = key ? openRouterIntentLlm(key, env.INTENT_MODEL ?? DEFAULT_INTENT_MODEL) : undefined;
+  return createCore({ db: openDb(env.DB_PATH ?? "firewall.db"), settler: createSettler(env.SETTLER ?? "mock"), intentLlm });
 }
