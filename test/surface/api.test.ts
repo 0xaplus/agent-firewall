@@ -155,3 +155,14 @@ describe("routing", () => {
     expect(JSON.stringify(await res.json())).not.toContain("secret");
   });
 });
+
+describe("audit", () => {
+  test("GET /api/audit/verify reports the chain; other methods 405; needs the admin token", async () => {
+    await pay(10);
+    const res = await call("GET", "/api/audit/verify");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, entries: 2 });
+    expect((await call("POST", "/api/audit/verify")).status).toBe(405);
+    expect((await call("GET", "/api/audit/verify", undefined, null)).status).toBe(401);
+  });
+});

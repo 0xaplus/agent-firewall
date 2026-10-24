@@ -1,5 +1,6 @@
 import { getMandate, getMandateByToken, getPayment, insertMandate, listPayments, monthSpend, openDb, setMandateStatus } from "./db";
 import { evaluate, type EvalDeps } from "./engine/evaluate";
+import { verifyAudit } from "./audit";
 import { CoreError } from "./errors";
 import { approvePayment, denyPayment, denyPending } from "./payments";
 import { DEFAULT_INTENT_MODEL, openRouterIntentLlm } from "./engine/intent";
@@ -53,6 +54,7 @@ export function createCore(deps: EvalDeps): Core {
 
     listPayments: (mandateId) => listPayments(db, mandateId),
 
+    verifyAudit: () => verifyAudit(db),
     approvePayment: (id) => approvePayment(deps, id),
     denyPayment: (id) => denyPayment(deps, id),
 

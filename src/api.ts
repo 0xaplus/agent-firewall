@@ -79,6 +79,12 @@ export async function handleApi(req: Request, core: Core): Promise<Response> {
       return json(m[2] === "approve" ? await core.approvePayment(id) : core.denyPayment(id));
     }
 
+    if (path === "/api/audit/verify") {
+      const bad = allow("GET");
+      if (bad) return bad;
+      return json(core.verifyAudit());
+    }
+
     if (path === "/api/stats") {
       const bad = allow("GET");
       if (bad) return bad;

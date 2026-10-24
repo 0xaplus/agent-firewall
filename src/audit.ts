@@ -1,10 +1,9 @@
 // Append-only, hash-chained log of every payment event. Each row's hash covers the row and the
 // previous row's hash, so editing or deleting a row breaks verification from that row on.
 import type { Database } from "bun:sqlite";
+import type { AuditCheck } from "./types";
 
 export const GENESIS = "0".repeat(64);
-
-export type AuditCheck = { ok: true; entries: number } | { ok: false; entries: number; brokenAt: number };
 
 interface Row { id: number; payment_id: string; event: string; data: string; prev_hash: string; hash: string; created_at: string }
 
