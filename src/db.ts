@@ -45,6 +45,12 @@ export function openDb(path = process.env.DB_PATH ?? "firewall.db"): Database {
     final INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   )`);
+  db.run(`CREATE TABLE IF NOT EXISTS budget_alerts (
+    mandate_id TEXT NOT NULL,
+    month TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    PRIMARY KEY (mandate_id, month)
+  )`);
   db.run(`CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payment_id TEXT NOT NULL,
@@ -180,4 +186,14 @@ export function insertTelegramMessage(db: Database, m: TelegramMessage): void {
 
 export function markTelegramFinal(db: Database, paymentId: string): void {
   db.query("UPDATE telegram_messages SET final = 1 WHERE payment_id = ?").run(paymentId);
+}
+
+// ---- budget alerts: one Telegram message per mandate per month (month = "YYYY-MM", UTC) ----
+
+export function hasBudgetAlert(db: Database, mandateId: string, month: string): boolean {
+  return !!db.query("SELECT 1 FROM budget_alerts WHERE mandate_id = ? AND month = ?").get(mandateId, month);
+}
+
+export function insertBudgetAlert(db: Database, mandateId: string, month: string, sentAt: string): void {
+  db.query("INSERT OR IGNORE INTO budget_alerts VALUES (?, ?, ?)").run(mandateId, month, sentAt);
 }

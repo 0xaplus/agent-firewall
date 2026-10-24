@@ -2,9 +2,10 @@
 // Approve / Deny buttons that call the same Core methods as the dashboard, so every rule still applies.
 // Long polling, so no public URL is needed. Any Telegram failure is logged and never reaches a payment.
 import type { Database } from "bun:sqlite";
-import { getTelegramMessage, insertTelegramMessage, markTelegramFinal } from "./db";
+import { budgetNotice, type BudgetNotice } from "./budget";
+import { getTelegramMessage, hasBudgetAlert, insertBudgetAlert, insertTelegramMessage, markTelegramFinal } from "./db";
 import { CoreError } from "./errors";
-import type { Core, Mandate, Payment } from "./types";
+import type { Core, Limits, Mandate, Payment } from "./types";
 
 export interface TelegramApi {
   call(method: string, params: object, signal?: AbortSignal): Promise<any>;
@@ -79,6 +80,10 @@ export function outcomeLine(p: Payment, how: "approved" | "denied" | "elsewhere"
   return `ℹ️ Already decided elsewhere: ${p.status.replaceAll("_", " ")}${why}`;
 }
 
+const amount = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+export const budgetAlertText = (m: Mandate, l: Limits, n: BudgetNotice) =>
+  `⚠️ ${m.name} has used ${n.pct}% of its monthly budget (${amount(l.spentThisMonth)} of ${amount(l.monthlyCap)} ${l.currency}).`;
+
 const decidedText = (p: Payment, m: Mandate | null, how: "approved" | "denied" | "elsewhere") =>
   [outcomeLine(p, how), ...summary(p, m), `ID: ${p.id}`].join("\n");
 
@@ -108,7 +113,8 @@ export function createTelegram(opts: TelegramOptions) {
   const notifyBlocked = opts.notifyBlocked ?? true;
   const log = opts.log ?? ((m: string) => console.warn(m));
   const sleep = opts.sleep ?? realSleep;
-  const startedAt = (opts.now ?? (() => new Date()))().toISOString();
+  const now = opts.now ?? (() => new Date());
+  const startedAt = now().toISOString();
   const deciding = new Set<string>(); // taps in progress: the tick leaves these alone
   const mandates = new Map<string, Mandate | null>();
   const mandateOf = (id: string) => {
@@ -149,6 +155,28 @@ export function createTelegram(opts: TelegramOptions) {
         }
       } catch (err) {
         log(`telegram: ${p.id}: ${(err as Error).message}`); // retried on the next tick
+      }
+    }
+    await budgetAlerts();
+  }
+
+  // Once per mandate per month, when its spend first reaches 80% of the cap. A notice only.
+  async function budgetAlerts(): Promise<void> {
+    const at = now();
+    const month = at.toISOString().slice(0, 7);
+    let list: Mandate[];
+    try { list = core.listMandates(); } catch (err) { log(`telegram: could not list mandates: ${(err as Error).message}`); return; }
+    for (const m of list) {
+      if (m.status !== "active") continue;
+      try {
+        if (hasBudgetAlert(db, m.id, month)) continue;
+        const limits = core.getLimits(m.id);
+        const notice = budgetNotice(limits.spentThisMonth, limits.monthlyCap);
+        if (notice.level === "ok") continue;
+        await api.call("sendMessage", { chat_id: chatId, text: budgetAlertText(m, limits, notice) });
+        insertBudgetAlert(db, m.id, month, at.toISOString());
+      } catch (err) {
+        log(`telegram: budget alert for ${m.id}: ${(err as Error).message}`); // retried on the next tick
       }
     }
   }
