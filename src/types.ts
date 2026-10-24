@@ -18,6 +18,7 @@ export interface Mandate {
   allowlist: Recipient[];
   expiresAt: string | null;
   status: "active" | "revoked";
+  ownerId?: string | null; // the signed-in user who created it; absent for mandates made with the admin token
 }
 export type NewMandate = Omit<Mandate, "id" | "agentToken" | "status">;
 

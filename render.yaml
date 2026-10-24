@@ -14,5 +14,11 @@ services:
         sync: false
       - key: TELEGRAM_BOT_TOKEN      # optional: use a different bot from your laptop's
         sync: false
-      - key: TELEGRAM_CHAT_ID
+      - key: TELEGRAM_CHAT_ID        # optional: the chat for agents made with the admin token
+        sync: false
+      - key: GOOGLE_CLIENT_ID        # optional: turns on Sign in with Google
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: PUBLIC_URL              # e.g. https://spend-firewall.onrender.com (Google's redirect goes here)
         sync: false

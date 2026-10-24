@@ -126,9 +126,14 @@
   /* ---- messages ---- */
   #banner { display: none; background: var(--stop-bg); border-left: 6px solid var(--stop); color: var(--stop); border-radius: 4px; padding: 12px 16px; font-weight: 600; }
   #banner.show { display: block; }
-  #login { display: none; align-items: end; gap: 12px; flex-wrap: wrap; max-width: 560px; }
-  #login.show { display: flex; }
-  #login label { flex: 1 1 220px; }
+  #login { display: none; max-width: 560px; }
+  #login.show { display: block; }
+  #login h2 { margin-bottom: 6px; }
+  #google-box { display: grid; gap: 14px; justify-items: start; margin-bottom: 18px; }
+  #admin-box summary { cursor: pointer; color: var(--ink-2); font-size: var(--t-sm); }
+  #token-form { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  #token-form label { flex: 1 1 220px; }
+  #who { color: var(--slate-ink-2); font-size: var(--t-sm); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #loading { color: var(--ink-2); padding: 48px 0; }
   .warn-text { color: var(--hold); font-weight: 600; margin: 0 0 14px; }
   #toasts { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: grid; gap: 8px; z-index: 30; width: min(560px, calc(100vw - 32px)); pointer-events: none; }
@@ -370,6 +375,8 @@
       <select id="msel" aria-label="View" hidden></select>
       <button class="ghost" id="new-btn" type="button" hidden>New mandate</button>
       <button class="ghost icon" id="theme-btn" type="button" aria-label="Switch to dark theme" title="Switch to dark theme"></button>
+      <button class="ghost" id="tg-btn" type="button" hidden>Connect Telegram</button>
+      <span id="who" hidden></span>
       <button class="ghost" id="signout" type="button" hidden>Sign out</button>
       <span class="live down" id="live" role="status">Connecting…</span>
     </div>
@@ -379,10 +386,20 @@
 <main class="wrap signedout" id="main">
   <div id="banner" role="alert"></div>
   <div id="loading" hidden>Loading…</div>
-  <form id="login" class="panel">
-    <label for="tok">Admin token<input id="tok" type="password" autocomplete="off" placeholder="Paste your ADMIN_TOKEN"></label>
-    <button class="primary" type="submit">Sign in</button>
-  </form>
+  <section id="login" class="panel">
+    <div id="google-box" hidden>
+      <h2>Sign in</h2>
+      <p class="hint">Your agents, their rules and your Telegram approvals, private to your account.</p>
+      <button class="primary" id="google-btn" type="button">Sign in with Google</button>
+    </div>
+    <details id="admin-box">
+      <summary>Sign in with an admin token</summary>
+      <form id="token-form">
+        <label for="tok">Admin token<input id="tok" type="password" autocomplete="off" placeholder="Paste your ADMIN_TOKEN"></label>
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+    </details>
+  </section>
 
   <form id="create" class="panel" hidden>
     <h2>New mandate</h2>
@@ -481,9 +498,15 @@ const TOKEN_KEY = "sf.token";
 const savedToken = () => { try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; } };
 const saveToken = (t) => { try { t ? sessionStorage.setItem(TOKEN_KEY, t) : sessionStorage.removeItem(TOKEN_KEY); } catch { /* storage blocked: you just sign in again after a refresh */ } };
 let token = params.get("token") || savedToken();
+let user = null; // signed in with Google: { id, email, name, telegramLinked }; the session is an HttpOnly cookie
+const signedIn = () => !!token || !!user;
 if (params.get("token")) saveToken(token);
 let mandateId = params.get("mandate") || "";
-if (params.has("token")) { params.delete("token"); history.replaceState(null, "", location.pathname + (params.size ? "?" + params : "")); }
+const authError = params.get("auth_error");
+if (params.has("token") || params.has("auth_error")) {
+  params.delete("token"); params.delete("auth_error");
+  history.replaceState(null, "", location.pathname + (params.size ? "?" + params : ""));
+}
 
 // Per-viewer conveniences in localStorage; the page works without them.
 const pref = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
@@ -567,7 +590,10 @@ const agentName = (p) => byId(p.mandateId)?.name ?? p.mandateId;
 
 async function api(path, opts = {}) {
   // A request that hangs (a server that died mid-connection) must not stall polling: give up after 5 s.
-  const res = await fetch(path, { ...opts, signal: AbortSignal.timeout(5000), headers: { authorization: `Bearer ${token}`, "content-type": "application/json" } });
+  // The admin token goes in a header; a Google session rides on its cookie, plus the header the server
+  // requires on writes so other sites can't make them.
+  const auth = token ? { authorization: `Bearer ${token}` } : { "x-sf-csrf": "1" };
+  const res = await fetch(path, { ...opts, signal: AbortSignal.timeout(5000), headers: { ...auth, "content-type": "application/json" } });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) { const e = new Error(body.error || `HTTP ${res.status}`); e.status = res.status; throw e; }
   return body;
@@ -646,8 +672,8 @@ function receiptLink(p, text = "View receipt") {
 function announce(msg) { $("announce").textContent = ""; setTimeout(() => { $("announce").textContent = msg; }, 50); }
 function renderLive() {
   const el = $("live");
-  el.classList.toggle("idle", !token);
-  if (!token) { el.textContent = "Signed out"; el.classList.remove("down"); return; }
+  el.classList.toggle("idle", !signedIn());
+  if (!signedIn()) { el.textContent = "Signed out"; el.classList.remove("down"); return; }
   if (offline || !lastOk) { el.textContent = loaded ? "Offline" : "Connecting…"; el.classList.add("down"); return; }
   const sec = Math.round((Date.now() - lastOk) / 1000);
   el.textContent = `Live, updated ${sec < 1 ? "just now" : `${sec} s ago`}`;
@@ -983,8 +1009,9 @@ function renderSelector() {
   const all = mandates.length > 1 ? [h("option", { value: "", ...(mandateId ? {} : { selected: "" }) }, "All agents")] : [];
   sel.replaceChildren(...all, ...mandates.map((m) => h("option", { value: m.id, ...(m.id === mandateId ? { selected: "" } : {}) }, m.name)));
   sel.hidden = mandates.length < 2;
-  $("new-btn").hidden = !token;
-  $("signout").hidden = !token;
+  $("new-btn").hidden = !signedIn();
+  $("signout").hidden = !signedIn();
+  renderAccount();
   const name = mandateId ? byId(mandateId)?.name : mandates.length ? "All agents" : "";
   $("view-name").hidden = !name || !sel.hidden; // the switcher already names the view
   $("view-name").textContent = name || "";
@@ -1174,7 +1201,7 @@ $("tryform").addEventListener("submit", async (e) => {
 // ---- polling ----
 let inFlight = false;
 async function refresh(force = false) {
-  if (!token) { setView("signedout"); $("login").classList.add("show"); renderLive(); return; }
+  if (!signedIn()) { setView("signedout"); $("login").classList.add("show"); renderAccount(); renderLive(); return; }
   if (inFlight && !force) return;
   inFlight = true;
   if (!loaded) setView("loading");
@@ -1216,7 +1243,11 @@ async function refresh(force = false) {
     if (scrollToWaiting) { scrollToWaiting = false; $("waiting").scrollIntoView({ behavior: "smooth" }); $("waiting-h").focus({ preventScroll: true }); }
     markOk();
   } catch (e) {
-    if (e.status === 401) { token = ""; saveToken(""); setView("signedout"); $("login").classList.add("show"); showError("Admin token rejected. Enter it again."); }
+    if (e.status === 401) {
+      const wasUser = !token && !!user;
+      token = ""; saveToken(""); user = null; setView("signedout"); $("login").classList.add("show"); renderAccount();
+      showError(wasUser ? "Your session ended. Sign in again." : "Admin token rejected. Enter it again.");
+    }
     else if (e.status === 404 && mandateId) { showError("That mandate no longer exists."); mandateId = ""; mandate = null; }
     else {
       offline = true;
@@ -1234,10 +1265,71 @@ function markOk() {
   renderLive();
 }
 
-$("login").addEventListener("submit", (e) => { e.preventDefault(); token = $("tok").value.trim(); saveToken(token); $("tok").value = ""; showError(""); refresh(true); });
-$("signout").addEventListener("click", () => { saveToken(""); location.reload(); });
+// ---- account: Google sign-in and the user's own Telegram link ----
+function renderAccount() {
+  $("who").hidden = !user;
+  $("who").textContent = user ? user.email : "";
+  $("who").title = user ? `Signed in as ${user.name} (${user.email})` : "";
+  $("tg-btn").hidden = !user;
+  if (user) $("tg-btn").textContent = user.telegramLinked ? "Telegram connected" : "Connect Telegram";
+}
+async function loadUser() {
+  try {
+    const r = await fetch("/auth/me", { signal: AbortSignal.timeout(5000) });
+    user = r.ok ? await r.json() : null;
+  } catch { user = null; }
+}
+let linkWatch = null;
+$("tg-btn").addEventListener("click", async () => {
+  if (!user) return;
+  if (user.telegramLinked) {
+    if (!confirm("Disconnect Telegram? Approvals and receipts will stop going to your chat.")) return;
+    try { await api("/api/telegram/unlink", { method: "POST" }); user.telegramLinked = false; renderAccount(); toast("Telegram disconnected", "x"); }
+    catch (e) { showError(`Could not disconnect Telegram: ${e.message}`); }
+    return;
+  }
+  // Open the tab now, while the click still counts, then point it at the bot once the link exists.
+  const tab = window.open("", "_blank");
+  try {
+    const { url, expiresInMinutes } = await api("/api/telegram/link", { method: "POST" });
+    if (tab) { tab.opener = null; tab.location.href = url; }
+    else toast(["Open this link in Telegram:", " ", h("a", { href: url, target: "_blank", rel: "noopener noreferrer" }, "Connect")], "", 15000);
+    toast(`Press Start in Telegram to finish. The link works once, for ${expiresInMinutes} minutes.`, "clock", 8000);
+    clearInterval(linkWatch);
+    const until = Date.now() + expiresInMinutes * 60_000;
+    linkWatch = setInterval(async () => {
+      await loadUser();
+      if (!user || user.telegramLinked || Date.now() > until) {
+        clearInterval(linkWatch);
+        if (user?.telegramLinked) toast("Telegram connected. Approvals and receipts will arrive there.", "check");
+      }
+      renderAccount();
+    }, 3000);
+  } catch (e) {
+    tab?.close();
+    showError(`Could not connect Telegram: ${e.message}`);
+  }
+});
+
+$("google-btn").addEventListener("click", () => { location.href = "/auth/google"; });
+$("token-form").addEventListener("submit", (e) => { e.preventDefault(); token = $("tok").value.trim(); saveToken(token); $("tok").value = ""; showError(""); refresh(true); });
+$("signout").addEventListener("click", async () => {
+  saveToken("");
+  if (user) { try { await fetch("/auth/logout", { method: "POST", headers: { "x-sf-csrf": "1" } }); } catch { /* reload signs out the page either way */ } }
+  location.reload();
+});
+
 renderFilters();
-refresh();
+(async () => {
+  if (!token) await loadUser();
+  // Show Google sign-in when the server has it; otherwise the admin token form is the way in.
+  let google = false;
+  try { google = (await (await fetch("/auth/config", { signal: AbortSignal.timeout(5000) })).json()).google === true; } catch { /* offline: token form */ }
+  $("google-box").hidden = !google;
+  $("admin-box").open = !google;
+  if (authError) showError(authError);
+  refresh();
+})();
 setInterval(refresh, 2000);
 </script>
 </body>

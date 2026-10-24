@@ -6,6 +6,7 @@ import { budgetNotice, type BudgetNotice } from "./budget";
 import { getTelegramMessage, hasBudgetAlert, insertBudgetAlert, insertTelegramMessage, markTelegramFinal } from "./db";
 import { CoreError } from "./errors";
 import type { Core, Limits, Mandate, Payment } from "./types";
+import { getUser, redeemTelegramLink, userForChat } from "./users";
 
 export interface TelegramApi {
   call(method: string, params: object, signal?: AbortSignal): Promise<any>;
@@ -104,7 +105,8 @@ export interface TelegramOptions {
   core: Core;
   db: Database;
   api: TelegramApi;
-  chatId: string | null;           // null: setup mode, only answers /start with the chat id
+  chatId: string | null;           // the admin's chat, for mandates made with the admin token; null: none
+                                   // (a signed-in user's mandates go to the chat they linked from the dashboard)
   notifyBlocked?: boolean;
   notifyPaid?: boolean;            // also report payments approved without you, with their receipt
   now?: () => Date;
@@ -133,6 +135,9 @@ export function createTelegram(opts: TelegramOptions) {
     return mandates.get(id)!;
   };
   const fresh = (id: string) => { mandates.delete(id); return mandateOf(id); };
+  // Where a mandate's messages go: its owner's linked chat, or the admin chat for admin-made mandates.
+  const chatFor = (m: Mandate | null): string | null =>
+    m?.ownerId ? getUser(db, m.ownerId)?.telegramChatId ?? null : chatId;
 
   const edit = async (chat: string, messageId: number, text: string) => {
     try {
@@ -144,7 +149,6 @@ export function createTelegram(opts: TelegramOptions) {
 
   // One pass: notify new held and blocked payments, and update messages decided elsewhere.
   async function tick(): Promise<void> {
-    if (!chatId) return;
     let payments: Payment[];
     try { payments = core.listPayments(); } catch (err) { log(`telegram: could not list payments: ${(err as Error).message}`); return; }
     for (const p of [...payments].reverse()) {
@@ -157,10 +161,12 @@ export function createTelegram(opts: TelegramOptions) {
           const paid = notifyPaid && p.verdict === "approved" && p.status === "settled" && p.createdAt >= startedAt;
           if (!held && !blocked && !paid) continue;
           const m = held ? fresh(p.mandateId) : mandateOf(p.mandateId);
+          const target = chatFor(m);
+          if (!target) continue; // nobody to tell yet; picked up once they link Telegram
           const sent = await api.call("sendMessage", held
-            ? { chat_id: chatId, text: heldText(p, m), reply_markup: keyboard(p.id) }
-            : { chat_id: chatId, text: blocked ? blockedText(p, m) : paidText(p, m) });
-          insertTelegramMessage(db, { paymentId: p.id, chatId, messageId: sent.message_id, kind: held ? "held" : blocked ? "blocked" : "paid", final: !held, createdAt: new Date().toISOString() });
+            ? { chat_id: target, text: heldText(p, m), reply_markup: keyboard(p.id) }
+            : { chat_id: target, text: blocked ? blockedText(p, m) : paidText(p, m) });
+          insertTelegramMessage(db, { paymentId: p.id, chatId: target, messageId: sent.message_id, kind: held ? "held" : blocked ? "blocked" : "paid", final: !held, createdAt: new Date().toISOString() });
         } else if (!rec.final && p.status !== "pending_approval") {
           await edit(rec.chatId, rec.messageId, decidedText(p, mandateOf(p.mandateId), "elsewhere"));
           markTelegramFinal(db, p.id);
@@ -185,7 +191,9 @@ export function createTelegram(opts: TelegramOptions) {
         const limits = core.getLimits(m.id);
         const notice = budgetNotice(limits.spentThisMonth, limits.monthlyCap);
         if (notice.level === "ok") continue;
-        await api.call("sendMessage", { chat_id: chatId, text: budgetAlertText(m, limits, notice) });
+        const target = chatFor(m);
+        if (!target) continue;
+        await api.call("sendMessage", { chat_id: target, text: budgetAlertText(m, limits, notice) });
         insertBudgetAlert(db, m.id, month, at.toISOString());
       } catch (err) {
         log(`telegram: budget alert for ${m.id}: ${(err as Error).message}`); // retried on the next tick
@@ -193,8 +201,19 @@ export function createTelegram(opts: TelegramOptions) {
     }
   }
 
-  async function onStart(chat: string): Promise<void> {
-    if (!chatId) {
+  async function onStart(chat: string, code?: string): Promise<void> {
+    // Opened from the dashboard's Connect Telegram link: the code says whose account this chat is.
+    if (code) {
+      const user = redeemTelegramLink(db, code, chat, now());
+      await api.call("sendMessage", { chat_id: chat, text: user
+        ? `Connected to ${user.email}. Payments from your agents will appear here.`
+        : "That link has expired or was already used. Open the dashboard and tap Connect Telegram again." });
+      return;
+    }
+    const linked = userForChat(db, chat);
+    if (linked) {
+      await api.call("sendMessage", { chat_id: chat, text: `Connected to ${linked.email}. Payments from your agents will appear here.` });
+    } else if (!chatId) {
       const hint = `Your chat id is ${chat}. Set TELEGRAM_CHAT_ID=${chat} in .env and restart the server.`;
       log(`telegram: ${hint}`);
       await api.call("sendMessage", { chat_id: chat, text: hint });
@@ -208,7 +227,10 @@ export function createTelegram(opts: TelegramOptions) {
   async function onTap(cq: any): Promise<void> {
     const chat = String(cq.message?.chat?.id ?? "");
     const match = /^([ad]):(\S+)$/.exec(String(cq.data ?? ""));
-    const allowed = !!chatId && chat === chatId && !!match;
+    // Only the chat that owns this payment's mandate may decide it.
+    const payment = match ? core.getPayment(match[2]!) : null;
+    const owner = payment ? chatFor(mandateOf(payment.mandateId)) : null;
+    const allowed = !!match && !!owner && chat === owner;
     await api.call("answerCallbackQuery", { callback_query_id: cq.id, text: !allowed ? "Not allowed" : match![1] === "a" ? "Approving…" : "Denying…" });
     if (!allowed) { log(`telegram: ignored a button tap from chat ${chat}`); return; }
 
@@ -238,7 +260,8 @@ export function createTelegram(opts: TelegramOptions) {
   async function handleUpdate(u: any): Promise<void> {
     if (u.callback_query) return onTap(u.callback_query);
     const text = u.message?.text;
-    if (typeof text === "string" && text.trim().startsWith("/start")) return onStart(String(u.message.chat.id));
+    const start = typeof text === "string" ? /^\/start(?:@\S+)?(?:\s+([A-Za-z0-9_-]{1,64}))?\s*$/.exec(text.trim()) : null;
+    if (start) return onStart(String(u.message.chat.id), start[1]);
   }
 
   // Long polling. Errors back off 2 s, doubling to 30 s; a 409 (another poller) is logged once.
@@ -274,13 +297,13 @@ export function startTelegram(opts: TelegramOptions & { intervalMs?: number }): 
   const t = createTelegram(opts);
   const ac = new AbortController();
   let running = false;
-  const timer = opts.chatId ? setInterval(async () => {
+  const timer = setInterval(async () => {
     if (running) return;
     running = true;
     try { await t.tick(); } finally { running = false; }
-  }, opts.intervalMs ?? 2000) : null;
+  }, opts.intervalMs ?? 2000);
   void t.pollLoop(ac.signal);
-  return () => { ac.abort(); if (timer) clearInterval(timer); };
+  return () => { ac.abort(); clearInterval(timer); };
 }
 
 // Off unless TELEGRAM_BOT_TOKEN is set; setup mode until TELEGRAM_CHAT_ID is set too.
@@ -289,7 +312,22 @@ export function startTelegramFromEnv(core: Core, db: Database, env: Record<strin
   const token = env.TELEGRAM_BOT_TOKEN?.trim();
   if (!token) { log("TELEGRAM_BOT_TOKEN not set: Telegram approvals are off."); return null; }
   const chatId = env.TELEGRAM_CHAT_ID?.trim() || null;
-  log(chatId ? "Telegram approvals on: held payments go to your Telegram chat."
-    : "Telegram setup mode: send /start to your bot to get your chat id, then set TELEGRAM_CHAT_ID and restart.");
+  log(chatId ? "Telegram approvals on: admin mandates go to TELEGRAM_CHAT_ID; signed-in users connect their own chat from the dashboard."
+    : "Telegram on: signed-in users connect their own chat from the dashboard. (Send /start to the bot for a chat id to use as TELEGRAM_CHAT_ID for admin mandates.)");
   return startTelegram({ core, db, api: telegramApi(token), chatId, notifyBlocked: env.TELEGRAM_NOTIFY_BLOCKED !== "0", notifyPaid: env.TELEGRAM_NOTIFY_PAID !== "0", log });
+}
+
+// The t.me link that opens this bot with a start code. The bot's username comes from getMe, once.
+export function telegramLinkFromEnv(env: Record<string, string | undefined> = process.env, doFetch: typeof fetch = fetch):
+  ((code: string) => Promise<string | null>) | undefined {
+  const token = env.TELEGRAM_BOT_TOKEN?.trim();
+  if (!token) return undefined;
+  const fixed = env.TELEGRAM_BOT_USERNAME?.trim().replace(/^@/, "");
+  let username: Promise<string | null> | null = fixed ? Promise.resolve(fixed) : null;
+  return async (code) => {
+    username ??= telegramApi(token, doFetch).call("getMe", {}).then((me) => (typeof me?.username === "string" ? me.username : null))
+      .catch((err) => { console.warn(`telegram: getMe failed: ${(err as Error).message}`); username = null; return null; });
+    const name = await username;
+    return name ? `https://t.me/${name}?start=${code}` : null;
+  };
 }

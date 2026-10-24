@@ -18,8 +18,13 @@ export function openDb(path = process.env.DB_PATH ?? "firewall.db"): Database {
     monthly_cap REAL NOT NULL,
     allowlist TEXT NOT NULL,
     expires_at TEXT,
-    status TEXT NOT NULL
+    status TEXT NOT NULL,
+    owner_id TEXT
   )`);
+  // Databases made before accounts existed have no owner column.
+  const cols = db.query("PRAGMA table_info(mandates)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "owner_id")) db.run("ALTER TABLE mandates ADD COLUMN owner_id TEXT");
+  db.run("CREATE INDEX IF NOT EXISTS mandates_owner ON mandates (owner_id)");
   db.run(`CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
     mandate_id TEXT NOT NULL,
@@ -51,6 +56,24 @@ export function openDb(path = process.env.DB_PATH ?? "firewall.db"): Database {
     sent_at TEXT NOT NULL,
     PRIMARY KEY (mandate_id, month)
   )`);
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    google_sub TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL,
+    name TEXT NOT NULL,
+    telegram_chat_id TEXT,
+    created_at TEXT NOT NULL
+  )`);
+  db.run(`CREATE TABLE IF NOT EXISTS sessions (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  )`);
+  db.run(`CREATE TABLE IF NOT EXISTS telegram_links (
+    code_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  )`);
   db.run(`CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payment_id TEXT NOT NULL,
@@ -69,12 +92,14 @@ const toMandate = (r: any): Mandate => ({
   id: r.id, name: r.name, task: r.task, currency: r.currency, agentToken: r.agent_token,
   autoApproveMax: r.auto_approve_max, hardMax: r.hard_max, monthlyCap: r.monthly_cap,
   allowlist: JSON.parse(r.allowlist), expiresAt: r.expires_at, status: r.status,
+  ...(r.owner_id != null ? { ownerId: r.owner_id } : {}),
 });
 
 export function insertMandate(db: Database, m: Mandate): void {
-  db.query(`INSERT INTO mandates VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+  db.query(`INSERT INTO mandates (id, name, task, currency, agent_token, auto_approve_max, hard_max, monthly_cap,
+    allowlist, expires_at, status, owner_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     m.id, m.name, m.task, m.currency, m.agentToken, m.autoApproveMax, m.hardMax, m.monthlyCap,
-    JSON.stringify(m.allowlist), m.expiresAt, m.status,
+    JSON.stringify(m.allowlist), m.expiresAt, m.status, m.ownerId ?? null,
   );
 }
 
