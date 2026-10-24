@@ -69,6 +69,9 @@ export interface Stats {
   settledAmount: number; blockedAmount: number;   // in the mandate currency
 }
 
+// Result of re-computing the audit log's hash chain. brokenAt is the first row id that doesn't match.
+export type AuditCheck = { ok: true; entries: number } | { ok: false; entries: number; brokenAt: number };
+
 // THE SEAM: Part A implements this (src/core.ts), Part B only calls it.
 export interface Core {
   // agent side (MCP)
@@ -84,4 +87,5 @@ export interface Core {
   approvePayment(id: string): Promise<Payment>;  // only from pending_approval; settles
   denyPayment(id: string): Payment;
   stats(mandateId?: string): Stats;
+  verifyAudit(): AuditCheck;                     // re-computes the audit log's hash chain
 }

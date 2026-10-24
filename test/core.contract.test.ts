@@ -157,6 +157,17 @@ describe("Core: human side", () => {
   });
 });
 
+describe("Core: audit log", () => {
+  test("verifyAudit: ok while untouched, broken at the row someone edits", async () => {
+    expect(core.verifyAudit()).toEqual({ ok: true, entries: 0 });
+    const p = await ask(500);
+    await core.approvePayment(p.id);
+    expect(core.verifyAudit()).toEqual({ ok: true, entries: 3 });
+    db.run("UPDATE audit_log SET data = replace(data, '500', '5') WHERE id = 1");
+    expect(core.verifyAudit()).toEqual({ ok: false, entries: 3, brokenAt: 1 });
+  });
+});
+
 describe("seed", () => {
   test("seedDemo inserts the demo mandate once and keeps its token", () => {
     const fresh = openDb(":memory:");
