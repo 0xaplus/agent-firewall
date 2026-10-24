@@ -1,5 +1,6 @@
 // Payment lifecycle: the only module that changes a payment's status.
 import type { Database } from "bun:sqlite";
+import { appendAudit } from "./audit";
 import { getMandate, getPayment, insertPayment, listPayments, movePayment, type PaymentPatch } from "./db";
 import { verdictOf } from "./engine/risk";
 import { mandateStopped } from "./engine/rules";
@@ -39,8 +40,15 @@ function needPending(db: Database, id: string): Payment {
 
 function move(db: Database, p: Payment, to: PaymentStatus, patch: PaymentPatch = {}): Payment {
   if (!MOVES[p.status].includes(to)) throw new CoreError("wrong_state", `Payment ${p.id} cannot go from ${words(p.status)} to ${words(to)}`);
+  // The status change and its audit row commit together, or not at all.
+  const moved = db.transaction(() => {
+    if (!movePayment(db, p.id, p.status, to, patch)) return false;
+    const reason = patch.checks?.at(-1)?.reason;
+    appendAudit(db, p.id, "status", { from: p.status, to, ...(reason ? { reason } : {}), ...(patch.reference ? { reference: patch.reference } : {}) });
+    return true;
+  })();
   // Someone else moved it first (a double-click, a revoke): refuse rather than overwrite.
-  if (!movePayment(db, p.id, p.status, to, patch)) throw new CoreError("wrong_state", `Payment ${p.id} is no longer ${words(p.status)}`);
+  if (!moved) throw new CoreError("wrong_state", `Payment ${p.id} is no longer ${words(p.status)}`);
   return getPayment(db, p.id)!;
 }
 
@@ -72,7 +80,11 @@ export async function openPayment(deps: PaymentDeps, mandate: Mandate, req: Paym
     checks,
     createdAt: (deps.now ?? (() => new Date()))().toISOString(),
   };
-  insertPayment(deps.db, payment);
+  deps.db.transaction(() => {
+    insertPayment(deps.db, payment);
+    const { mandateId, amount, currency, recipient, status } = payment;
+    appendAudit(deps.db, payment.id, "opened", { mandateId, amount, currency, recipient, verdict, status, risk }, new Date(payment.createdAt));
+  })();
   return verdict === "approved" ? settle(deps, payment) : payment;
 }
 

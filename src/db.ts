@@ -37,6 +37,15 @@ export function openDb(path = process.env.DB_PATH ?? "firewall.db"): Database {
     created_at TEXT NOT NULL
   )`);
   db.run("CREATE INDEX IF NOT EXISTS payments_mandate_created ON payments (mandate_id, created_at)");
+  db.run(`CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payment_id TEXT NOT NULL,
+    event TEXT NOT NULL,
+    data TEXT NOT NULL,
+    prev_hash TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`);
   return db;
 }
 
