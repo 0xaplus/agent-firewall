@@ -3,264 +3,358 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Spend Firewall</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Crect width='28' height='28' rx='7' fill='%23232a36'/%3E%3Cpath d='M6 14h9M12 9.5l4.5 4.5-4.5 4.5' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M21 7v14' stroke='%236b8cff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
+  /* Spend Firewall: a clearance board. Each payment request is a strip on a board; the colour of its
+     holder says cleared (paid), holding (waiting for you) or refused (blocked). One type family. */
   :root {
     color-scheme: light;
-    --ground: oklch(97.6% 0.006 255);
-    --surface: oklch(100% 0 0);
-    --ink: oklch(24% 0.03 258);
-    --ink-2: oklch(44% 0.025 258);
-    --ink-3: oklch(52% 0.02 258);
-    --line: oklch(92.5% 0.008 258);
-    --line-2: oklch(85% 0.012 258);
-    --accent: oklch(47% 0.18 264);
-    --accent-hover: oklch(40% 0.18 264);
-    --accent-wash: oklch(95.5% 0.03 264);
-    --ok: oklch(46% 0.12 155);
-    --ok-wash: oklch(95.5% 0.045 155);
-    --warn: oklch(48% 0.11 65);
-    --warn-wash: oklch(96% 0.05 88);
-    --warn-line: oklch(86% 0.08 85);
-    --bad: oklch(49% 0.19 27);
-    --bad-wash: oklch(96% 0.03 25);
-    --bad-line: oklch(86% 0.07 25);
-    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-    --ease: cubic-bezier(.22, 1, .36, 1);
+    --ground: #e8ecee; --bay: #d9e0e4; --bay-edge: #c9d2d8; --strip: #ffffff; --strip-2: #f6f8f9;
+    --ink: #14222c; --ink-2: #3f4f5a; --ink-3: #56656f; --rule: #dde3e7; --rule-2: #c3ccd2;
+    --slate: #1d3442; --slate-ink: #eef2f4; --slate-ink-2: #b4c3cc; --slate-rule: rgb(238 242 244 / 0.2);
+    --act: #1d3442; --act-hover: #142833; --on-act: #ffffff; --focus: #2f6fb0;
+    --clear: #1c6b4f; --clear-bg: #e3f1ea; --clear-rule: #a8d2bf;
+    --hold: #9a5b00; --hold-bg: #fff1d6; --hold-rule: #e6c27a;
+    --stop: #b22a20; --stop-bg: #fbe8e6; --stop-rule: #eab2ac;
+    --void: #56656f; --void-bg: #eceff1;
+    --logo: #1d3442;
+    --type: "DIN Alternate", "Bahnschrift", "D-DIN", "DIN 2014", "Ubuntu Sans", "Ubuntu", "DejaVu Sans", sans-serif;
+    --t-sm: 14px; --t-base: 16px; --t-md: 19px; --t-lg: 24px; --t-xl: 34px;
+    --ease: cubic-bezier(.2, .8, .2, 1);
   }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #0f1b23; --bay: #0a141a; --bay-edge: #233540; --strip: #172833; --strip-2: #1b2f3b;
+      --ink: #e6edf1; --ink-2: #b9c8d1; --ink-3: #98aab5; --rule: #26394a; --rule-2: #35495a;
+      --slate: #0a141a; --slate-ink: #e6edf1; --slate-ink-2: #98aab5; --slate-rule: rgb(230 237 241 / 0.16);
+      --act: #cfe0ea; --act-hover: #e6edf1; --on-act: #0f1b23; --focus: #7fb4e6;
+      --clear: #6fd0a4; --clear-bg: #10291f; --clear-rule: #24573f;
+      --hold: #f0b34d; --hold-bg: #2b200d; --hold-rule: #5e4416;
+      --stop: #ff8f84; --stop-bg: #2e1513; --stop-rule: #67302a;
+      --void: #98aab5; --void-bg: #1d2e39;
+      --logo: #2c4a5c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #0f1b23; --bay: #0a141a; --bay-edge: #233540; --strip: #172833; --strip-2: #1b2f3b;
+    --ink: #e6edf1; --ink-2: #b9c8d1; --ink-3: #98aab5; --rule: #26394a; --rule-2: #35495a;
+    --slate: #0a141a; --slate-ink: #e6edf1; --slate-ink-2: #98aab5; --slate-rule: rgb(230 237 241 / 0.16);
+    --act: #cfe0ea; --act-hover: #e6edf1; --on-act: #0f1b23; --focus: #7fb4e6;
+    --clear: #6fd0a4; --clear-bg: #10291f; --clear-rule: #24573f;
+    --hold: #f0b34d; --hold-bg: #2b200d; --hold-rule: #5e4416;
+    --stop: #ff8f84; --stop-bg: #2e1513; --stop-rule: #67302a;
+    --void: #98aab5; --void-bg: #1d2e39;
+    --logo: #2c4a5c;
+  }
+
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0; background: var(--ground); color: var(--ink);
-    font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
-    caret-color: var(--accent); accent-color: var(--accent);
-    scrollbar-color: var(--line-2) transparent;
-  }
-  ::selection { background: var(--accent-wash); color: var(--ink); }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 400 var(--t-base)/1.5 var(--type);
+         font-variant-numeric: tabular-nums lining-nums; -webkit-font-smoothing: antialiased; accent-color: var(--act); }
   [hidden] { display: none !important; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
-  a { color: var(--accent); text-underline-offset: 3px; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+  a { color: var(--ink); text-decoration-color: var(--rule-2); text-underline-offset: 3px; }
+  .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  svg.i { width: 18px; height: 18px; flex: none; }
+  h2 { margin: 0; font-size: var(--t-lg); font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+  .hint { color: var(--ink-2); margin: 0 0 16px; max-width: 64ch; }
+  .sub { color: var(--ink-3); font-size: var(--t-sm); }
+  .empty { color: var(--ink-2); padding: 20px 22px; }
 
-  /* ---- shell ---- */
-  .top { background: var(--surface); border-bottom: 1px solid var(--line); }
-  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 32px; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; min-height: 64px; padding-top: 10px; padding-bottom: 10px; }
-  .brand { display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+  /* ---- the slate bar ---- */
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 32px; }
+  .top { background: var(--slate); color: var(--slate-ink); position: sticky; top: 0; z-index: 10; }
+  .topbar { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; min-height: 64px; padding-top: 10px; padding-bottom: 10px; }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 700; letter-spacing: -0.005em; white-space: nowrap; }
   .brand svg { display: block; }
-  .hdr { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .live { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 14px; }
-  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
-  .live.down::before { background: var(--bad); }
-  main { padding-top: 8px; padding-bottom: 80px; display: grid; gap: 40px; }
+  .crumb { color: var(--slate-ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .crumb::before { content: "/"; margin-right: 12px; color: var(--slate-rule); }
+  .hdr { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+  .top button.ghost, .top select { background: transparent; color: var(--slate-ink); border-color: var(--slate-rule); }
+  .top button.ghost:hover:not(:disabled) { background: rgb(255 255 255 / 0.08); border-color: var(--slate-ink-2); }
+  .top select option { color: #14222c; background: #ffffff; }
+  .top :focus-visible { outline-color: var(--slate-ink); }
+  .live { display: inline-flex; align-items: center; gap: 8px; color: var(--slate-ink-2); font-size: var(--t-sm); white-space: nowrap; }
+  .live::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: #6fd0a4; }
+  .live.down { color: #ffb0a6; font-weight: 600; }
+  .live.down::before { background: #ff8f84; }
+  .live.idle::before { background: var(--slate-ink-2); }
+  main#main { padding-top: 28px; padding-bottom: 96px; display: grid; gap: 40px; }
   main > * { min-width: 0; }
-  h2 { margin: 0 0 14px; font-size: 17px; font-weight: 650; letter-spacing: -0.005em; }
-  .hint { color: var(--ink-2); margin: 0 0 20px; max-width: 68ch; }
-  .sub { color: var(--ink-3); font-size: 14px; }
-  .empty { color: var(--ink-2); padding: 14px 0; }
-
-  /* ---- surfaces: one elevation, a hairline border ---- */
-  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
-  form.panel, section.panel, details.panel { padding: 28px; }
-  #mandate { padding: 24px; }
 
   /* ---- controls ---- */
-  button { font: inherit; font-weight: 600; font-size: 15px; line-height: 1.2; min-height: 40px; padding: 10px 18px; border-radius: 8px;
-           border: 1px solid transparent; cursor: pointer; color: var(--ink);
-           transition: background-color .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease), transform .12s var(--ease); }
-  button:active:not(:disabled) { transform: scale(.98); }
-  button:disabled { opacity: .5; cursor: progress; }
-  button.approve { background: var(--accent); color: #fff; }
-  button.approve:hover:not(:disabled) { background: var(--accent-hover); }
-  button.deny { background: var(--surface); border-color: var(--bad-line); color: var(--bad); }
-  button.deny:hover:not(:disabled) { background: var(--bad-wash); border-color: var(--bad); }
-  button.ghost { background: var(--surface); border-color: var(--line-2); }
-  button.ghost:hover:not(:disabled) { background: var(--ground); border-color: var(--ink-3); }
-  button.danger { background: var(--surface); border-color: var(--bad-line); color: var(--bad); }
-  button.danger:hover:not(:disabled) { background: var(--bad-wash); }
-  button.danger.confirm { background: var(--bad); border-color: var(--bad); color: #fff; }
-  label { display: grid; gap: 6px; color: var(--ink-2); font-size: 14px; font-weight: 500; }
-  input, select, textarea {
-    font: inherit; font-size: 16px; color: var(--ink); background: var(--surface); width: 100%; min-width: 0;
-    border: 1px solid var(--line-2); border-radius: 8px; padding: 9px 12px; min-height: 40px;
-    transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
-  }
+  button { font: inherit; font-weight: 600; font-size: 15px; line-height: 1.2; min-height: 40px; padding: 9px 16px; border-radius: 6px;
+           border: 1px solid transparent; cursor: pointer; color: var(--ink); background: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+           transition: background-color .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease); }
+  button:disabled { opacity: .55; cursor: progress; }
+  button.primary { background: var(--act); color: var(--on-act); }
+  button.primary:hover:not(:disabled) { background: var(--act-hover); }
+  button.ghost { background: var(--strip); border-color: var(--rule-2); }
+  button.ghost:hover:not(:disabled) { border-color: var(--ink-3); }
+  button.quiet { color: var(--ink-2); padding: 4px 8px; min-height: 32px; text-decoration: underline; text-decoration-color: var(--rule-2); text-underline-offset: 4px; font-weight: 600; }
+  button.quiet:hover:not(:disabled) { color: var(--ink); text-decoration-color: var(--ink-3); }
+  button.deny, button.danger { background: var(--strip); border-color: var(--stop-rule); color: var(--stop); }
+  button.deny:hover:not(:disabled), button.danger:hover:not(:disabled) { border-color: var(--stop); }
+  button.danger.confirm { background: var(--stop); border-color: var(--stop); color: var(--strip); }
+  button.icon { width: 40px; padding: 0; }
+  label { display: grid; gap: 6px; color: var(--ink-2); font-size: var(--t-sm); font-weight: 600; }
+  input, select, textarea { font: inherit; font-size: var(--t-base); color: var(--ink); background: var(--strip); width: 100%; min-width: 0;
+                            border: 1px solid var(--rule-2); border-radius: 4px; padding: 9px 12px; min-height: 42px; }
   input::placeholder, textarea::placeholder { color: var(--ink-3); opacity: 1; }
-  input:hover, select:hover, textarea:hover { border-color: var(--ink-3); }
-  input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--focus); outline-offset: 0; }
   textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
-  select { width: auto; max-width: 240px; padding-right: 32px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px 20px; margin-bottom: 28px; }
+  select { width: auto; max-width: 260px; }
+  .panel { background: var(--strip); border: 1px solid var(--rule); border-radius: 8px; }
+  form.panel, section.panel, details.panel { padding: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px 20px; margin-bottom: 24px; }
   .grid .wide { grid-column: 1 / -1; }
   .row { display: grid; grid-template-columns: 2.2fr 1.3fr 1fr auto; gap: 12px; margin-bottom: 12px; align-items: end; }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
-  .draft { display: grid; gap: 12px; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
-  .draft-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .notes { margin: 0; padding: 12px 16px 12px 34px; border: 1px solid var(--warn-line); background: var(--warn-wash); border-radius: 10px; color: var(--warn); font-weight: 500; }
-  .notes.ok { list-style: none; padding-left: 16px; border-color: var(--ok); background: var(--ok-wash); color: var(--ok); }
+
+  /* ---- verdicts: an icon and a word ---- */
+  .chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 3px; padding: 2px 9px 2px 7px; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .chip svg { width: 16px; height: 16px; }
+  .chip.ok { background: var(--clear-bg); color: var(--clear); }
+  .chip.warn { background: var(--hold-bg); color: var(--hold); }
+  .chip.bad { background: var(--stop-bg); color: var(--stop); }
+  .chip.muted { background: var(--void-bg); color: var(--void); }
 
   /* ---- messages ---- */
-  #banner { display: none; background: var(--bad-wash); border: 1px solid var(--bad-line); color: var(--bad); border-radius: 10px; padding: 12px 16px; font-weight: 500; }
+  #banner { display: none; background: var(--stop-bg); border-left: 6px solid var(--stop); color: var(--stop); border-radius: 4px; padding: 12px 16px; font-weight: 600; }
   #banner.show { display: block; }
-  #login { display: none; align-items: end; gap: 12px; flex-wrap: wrap; max-width: 520px; }
+  #login { display: none; align-items: end; gap: 12px; flex-wrap: wrap; max-width: 560px; }
   #login.show { display: flex; }
   #login label { flex: 1 1 220px; }
-  .warn { color: var(--warn); font-weight: 500; margin: 0 0 14px; }
+  #loading { color: var(--ink-2); padding: 48px 0; }
+  .warn-text { color: var(--hold); font-weight: 600; margin: 0 0 14px; }
+  #toasts { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); display: grid; gap: 8px; z-index: 30; width: min(560px, calc(100vw - 32px)); pointer-events: none; }
+  .toast { background: var(--slate); color: var(--slate-ink); border-radius: 6px; padding: 12px 16px; font-weight: 600; display: flex; gap: 8px; align-items: center;
+           box-shadow: 0 10px 30px -10px rgb(0 0 0 / 0.45); animation: toast-in .2s var(--ease); }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } }
 
-  /* ---- the statement ---- */
-  .statement { padding-top: 40px; }
-  .statement-line { margin: 0; font-size: clamp(28px, 4.4vw, 46px); line-height: 1.12; font-weight: 600; letter-spacing: -0.025em; text-wrap: balance; }
-  .statement-line b { font-weight: 700; white-space: nowrap; }
-  .statement-line .ok { color: var(--ok); }
-  .statement-line .bad { color: var(--bad); }
-  .statement-sub { margin: 14px 0 0; color: var(--ink-2); font-size: 16px; }
-  .statement-sub span { font-weight: 650; color: var(--ink); }
-  .audit { margin: 8px 0 0; font-size: 14px; color: var(--ok); font-weight: 500; }
-  .audit.broken { color: var(--bad); }
+  /* ---- the clearance strip: four figures in one strip, not four cards ---- */
+  .hero { display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr; background: var(--strip); border: 1px solid var(--rule); border-left: 10px solid var(--slate); border-radius: 4px; }
+  .tile { padding: 16px 22px 18px; display: grid; gap: 4px; align-content: start; min-width: 0; border-left: 1px solid var(--rule); }
+  .tile:first-child { border-left: 0; }
+  .tile .lbl { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 15px; font-weight: 600; }
+  .tile .lbl svg { width: 17px; height: 17px; }
+  .tile .val { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-stretch: 90%; overflow-wrap: anywhere; }
+  .tile .val.small { font-size: var(--t-md); }
+  .tile .note { color: var(--ink-3); font-size: var(--t-sm); }
+  .tile.paid .lbl { color: var(--clear); }
+  .tile.blocked .lbl { color: var(--stop); }
+  .tile.waiting.on { background: var(--hold-bg); }
+  .tile.waiting.on .lbl, .tile.waiting.on .val { color: var(--hold); }
+  .tile.waiting button { justify-self: start; margin-top: 6px; min-height: 34px; padding: 5px 14px; border-color: var(--hold-rule); }
+  .tile .lines { display: grid; gap: 2px; }
+  .tile .budgets { display: grid; gap: 10px; }
+  .tile .budgets .val { font-size: var(--t-md); }
+  .meter { height: 8px; background: var(--void-bg); border-radius: 1px; overflow: hidden; }
+  .meter > div { height: 100%; background: var(--slate); }
+  .meter.warn > div { background: var(--hold); }
+  .meter.full > div { background: var(--stop); }
+  :root[data-theme="dark"] .meter > div { background: var(--act); }
 
-  /* ---- waiting for you ---- */
-  .pending { display: grid; gap: 12px; }
-  .pend { display: grid; grid-template-columns: 1fr auto; gap: 16px 24px; align-items: center;
-          background: var(--warn-wash); border: 1px solid var(--warn-line); border-radius: 12px; padding: 18px 22px; }
-  .pend .amt { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; }
-  .pend .meta { color: var(--ink-2); margin-top: 2px; }
-  .pend .why { margin-top: 8px; font-size: 14px; color: var(--warn); font-weight: 500; max-width: 70ch; }
+  /* ---- bays: recessed boards the strips sit in ---- */
+  .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .pending, .feed-bay, .agents { background: var(--bay); border-radius: 10px; padding: 10px; display: grid; gap: 8px; box-shadow: inset 0 1px 0 var(--bay-edge), inset 0 0 0 1px var(--bay-edge); }
+  .pending > .empty { background: transparent; }
+  .newflag { margin-left: 10px; border-radius: 3px; padding: 1px 8px; font-size: 14px; font-weight: 700; background: var(--hold); color: var(--strip); vertical-align: 3px; }
+
+  /* a held strip: amber holder, the decision on the right */
+  .pend { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 28px; align-items: center; background: var(--strip);
+          border-left: 10px solid var(--hold); border-radius: 4px; padding: 16px 20px; transition: opacity .25s var(--ease), transform .25s var(--ease); }
+  .pend .amt { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-stretch: 90%; }
+  .pend .to { font-size: var(--t-md); font-weight: 700; margin-top: 2px; overflow-wrap: anywhere; }
+  .pend .meta { color: var(--ink-2); overflow-wrap: anywhere; }
+  .pend .why { margin-top: 8px; color: var(--hold); font-weight: 600; max-width: 75ch; }
+  .pend .why ul { margin: 2px 0 0; padding-left: 20px; }
+  .pend.fresh { animation: slot-in .5s var(--ease); }
+  .pend.leaving { opacity: 0; transform: translateX(28px); }
   .btns { display: flex; gap: 10px; }
-  .newflag { margin-left: 10px; vertical-align: 2px; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 650; background: var(--warn); color: #fff; }
-  .pend.fresh { animation: ring 1.2s var(--ease) 2; }
-  @keyframes ring { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 0 6px var(--warn-line); } }
-  .btns button { min-width: 108px; min-height: 44px; }
+  .btns button { min-width: 124px; min-height: 50px; font-size: 17px; }
 
-  /* ---- layout: activity + mandate ---- */
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; align-items: start; }
-  .layout > aside { position: sticky; top: 16px; }
+  /* ---- agents, as strips ---- */
+  .agent { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.5fr) auto; gap: 10px 28px; align-items: center; background: var(--strip);
+           border-left: 10px solid var(--slate); border-radius: 4px; padding: 14px 20px; cursor: pointer; }
+  :root[data-theme="dark"] .agent { border-left-color: var(--rule-2); }
+  .agent.has-waiting { border-left-color: var(--hold); }
+  .agent.is-stopped { border-left-color: var(--stop); }
+  .agent .open { all: unset; cursor: pointer; font-size: var(--t-md); font-weight: 700; }
+  .agent .open:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+  .agent .meta { color: var(--ink-2); font-size: var(--t-sm); margin-top: 2px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .state { font-weight: 700; }
+  .inline { display: flex; gap: 14px; flex-wrap: wrap; }
+  .state.revoked, .state.expired { color: var(--stop); }
+  .agent .side { display: grid; gap: 6px; justify-items: end; text-align: right; }
+  .agent button.waiting { background: var(--hold-bg); border: 1px solid var(--hold-rule); color: var(--hold); min-height: 42px; }
+  .agent button.waiting:hover { border-color: var(--hold); }
+  .calm { color: var(--ink-3); font-size: var(--t-sm); }
+  .bar-label { color: var(--ink-2); font-size: var(--t-sm); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+  .budget { display: inline-flex; gap: 6px; align-items: center; margin-top: 8px; border-radius: 3px; padding: 2px 10px; font-size: 14px; font-weight: 700; background: var(--hold-bg); color: var(--hold); }
+  .budget.full { background: var(--stop-bg); color: var(--stop); }
 
-  /* ---- activity table ---- */
-  .scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; color: var(--ink-3); font-size: 13px; font-weight: 500; padding: 12px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th:nth-child(2) { text-align: right; }
-  td { padding: 14px 12px; border-top: 1px solid var(--line); vertical-align: top; }
-  tbody tr:first-child td { border-top: 0; }
-  td:first-child { color: var(--ink-3); font-size: 14px; white-space: nowrap; }
-  td.amt { font-weight: 650; text-align: right; white-space: nowrap; }
-  td:nth-child(3) { min-width: 240px; }
-  td:nth-child(3) > div:first-child { font-weight: 600; }
-  td:nth-child(3) .sub { display: block; font-family: var(--mono); font-size: 12.5px; font-weight: 400; margin: 1px 0 0; overflow-wrap: anywhere; }
-  td:nth-child(3) > .sub { font-family: inherit; font-size: 14px; margin: 4px 0 0; }
-  td:nth-child(5) { color: var(--ink-2); }
-  td:nth-child(5), td:nth-child(6) { white-space: nowrap; }
-  .reasons { margin-top: 6px; font-size: 14px; color: var(--bad); font-weight: 500; }
-  .reasons.amber { color: var(--warn); }
-  .badge { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 3px 11px 3px 9px; font-size: 13px; font-weight: 650; white-space: nowrap; }
-  .badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
-  .badge.approved { background: var(--ok-wash); color: var(--ok); }
-  .badge.needs_approval { background: var(--warn-wash); color: var(--warn); }
-  .badge.blocked { background: var(--bad-wash); color: var(--bad); }
-  .st { color: var(--ink-3); font-size: 13px; margin-top: 4px; }
-  td span[title] { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); }
-  #feed-empty { padding: 28px 16px; text-align: center; border-top: 1px solid var(--line); }
-  tr.new td { animation: settle 1.8s var(--ease); }
-  tr.new.v-blocked td { animation-name: stop; }
-  @keyframes settle { from { background: var(--accent-wash); } to { background: transparent; } }
-  @keyframes stop { 0%, 35% { background: var(--bad-wash); } 100% { background: transparent; } }
+  /* ---- the board: one strip per request, fields divided by rules ---- */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: start; }
+  .layout > aside { position: sticky; top: 88px; display: grid; gap: 16px; }
+  .filters { display: flex; gap: 4px; flex-wrap: wrap; background: var(--bay); padding: 4px; border-radius: 7px; }
+  .filters button { min-height: 34px; padding: 5px 14px; border-radius: 4px; font-size: var(--t-sm); color: var(--ink-2); }
+  .filters button[aria-pressed="true"] { background: var(--strip); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+  .feed-bay > .feed { display: grid; gap: 8px; }
+  .feed-bay > .empty { background: var(--strip); border-radius: 4px; }
+  .item { display: grid; grid-template-columns: 84px 140px minmax(0, 1fr) 150px; background: var(--strip); border-left: 10px solid var(--clear); border-radius: 4px; align-items: stretch; }
+  .item > * { padding: 12px 16px; }
+  .item > * + * { border-left: 1px solid var(--rule); }
+  .item.v-row-blocked { border-left-color: var(--stop); }
+  .item.v-row-held { border-left-color: var(--hold); }
+  .item.v-row-void { border-left-color: var(--rule-2); }
+  .item .when { color: var(--ink-3); font-size: var(--t-sm); font-stretch: 90%; }
+  .item .amt { font-weight: 700; font-size: var(--t-md); text-align: right; font-stretch: 90%; overflow-wrap: anywhere; }
+  .item .who { font-weight: 700; overflow-wrap: anywhere; }
+  .item .addr { color: var(--ink-3); font-weight: 400; font-size: var(--t-sm); margin-left: 8px; }
+  .item .purpose { color: var(--ink-2); font-size: var(--t-sm); overflow-wrap: anywhere; }
+  .item .reason { margin-top: 6px; font-size: var(--t-sm); font-weight: 600; color: var(--stop); }
+  .item .reason.held { color: var(--hold); }
+  .item .verdict { display: grid; gap: 8px; justify-items: start; align-content: start; }
+  .item .tools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; margin-left: -8px; }
+  .item.new { animation: slot-in .5s var(--ease); }
+  @keyframes slot-in { from { transform: translateX(-14px); opacity: 0; } }
+  .risk { display: grid; grid-template-columns: auto 56px; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-3); }
+  .risk .meter { height: 6px; }
+  .risk.hi .meter > div { background: var(--stop); }
+  .risk.mid .meter > div { background: var(--hold); }
+  .checks { grid-column: 1 / -1; margin: 0; list-style: none; display: grid; gap: 8px; padding: 12px 16px 14px 100px; border-top: 1px solid var(--rule); background: var(--strip-2); }
+  .item > .checks { border-left: 0; }
+  .checks li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; font-size: var(--t-sm); }
+  .checks li svg { width: 18px; height: 18px; margin-top: 1px; }
+  .checks .pass svg { color: var(--clear); }
+  .checks .fail svg { color: var(--stop); }
+  .checks .fail.escalate svg { color: var(--hold); }
+  .checks b { font-weight: 700; }
+  .checks .sev { color: var(--ink-3); }
+  .ref { color: var(--ink-3); font-size: 13px; }
 
-  /* ---- mandate ---- */
-  .name { font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
-  .task { color: var(--ink-2); margin: 4px 0 20px; }
-  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; }
-  dt, dd { padding: 9px 0; border-top: 1px solid var(--line); }
+  /* ---- the mandate ---- */
+  #mandate { padding: 22px; border-top: 6px solid var(--slate); }
+  :root[data-theme="dark"] #mandate { border-top-color: var(--rule-2); }
+  .name { font-size: var(--t-md); font-weight: 700; }
+  .task { color: var(--ink-2); margin: 6px 0 14px; }
+  dl { margin: 16px 0 0; display: grid; grid-template-columns: auto 1fr; }
+  dt, dd { padding: 9px 0; border-top: 1px solid var(--rule); }
   dt { color: var(--ink-2); padding-right: 16px; }
-  dd { margin: 0; text-align: right; font-weight: 600; }
-  [role=progressbar] { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 20px 0 8px; }
-  [role=progressbar] > div { height: 100%; background: var(--accent); border-radius: 3px; transition: width .5s var(--ease); }
-  .bar-label { color: var(--ink-2); font-size: 14px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-  .chip { border: 1px solid var(--line-2); border-radius: 6px; padding: 3px 10px; font-size: 14px; color: var(--ink-2); background: var(--surface); }
-  .mandate-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+  dd { margin: 0; text-align: right; font-weight: 700; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+  .tag { background: var(--void-bg); border-radius: 3px; padding: 3px 10px; font-size: var(--t-sm); color: var(--ink-2); }
+  .mandate-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule); }
+  .chart { width: 100%; height: auto; display: block; margin-top: 6px; }
+  .chart .bar { fill: var(--slate); }
+  :root[data-theme="dark"] .chart .bar { fill: var(--act); }
+  .chart .axis { stroke: var(--rule-2); }
+  .chart text { fill: var(--ink-3); font-size: 11px; font-family: inherit; }
+  .audit { margin: 0; font-size: var(--t-sm); color: var(--clear); font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  .audit.broken { color: var(--stop); }
+
+  /* ---- why it was blocked ---- */
+  dialog { border: 0; border-top: 10px solid var(--slate); border-radius: 6px; padding: 0; width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+           background: var(--strip); color: var(--ink); box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.5); }
+  dialog.stop { border-top-color: var(--stop); }
+  dialog.hold { border-top-color: var(--hold); }
+  dialog::backdrop { background: rgb(15 27 35 / 0.6); }
+  .dlg { display: grid; gap: 18px; padding: 22px 26px 26px; }
+  .dlg-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+  .dlg-head h2 { font-size: var(--t-lg); line-height: 1.25; }
+  .dlg .summary { font-size: var(--t-md); font-weight: 700; }
+  .dlg .summary.bad { color: var(--stop); }
+  .dlg .summary.warn { color: var(--hold); }
+  .dlg .summary.ok { color: var(--clear); }
+  .dlg h3 { margin: 0 0 6px; font-size: var(--t-base); font-weight: 700; }
+  .untrusted { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 15px/1.6 var(--type);
+               background: var(--strip-2); border: 1px dashed var(--stop-rule); border-radius: 4px; padding: 12px 14px; color: var(--ink); }
+  .dlg .checks { padding: 0; background: none; border: 0; gap: 10px; }
+  .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin: 0; }
+  .facts dt, .facts dd { padding: 0; border: 0; text-align: left; }
+  .facts dd { font-weight: 600; }
 
   /* ---- connect / try ---- */
-  pre { background: var(--ground); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 8px 0 20px;
-        font: 13px/1.6 var(--mono); white-space: pre-wrap; word-break: break-all; color: var(--ink); }
+  pre.code { background: var(--strip-2); border: 1px solid var(--rule); border-radius: 4px; padding: 14px 16px; overflow-x: auto; margin: 8px 0 20px;
+             font: 14px/1.6 var(--type); white-space: pre-wrap; word-break: break-all; color: var(--ink); }
   .copyrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  .copyrow b { font-size: 15px; font-weight: 650; }
-  .copyrow button.icon { display: inline-grid; place-items: center; width: 36px; height: 36px; min-height: 0; padding: 0; color: var(--ink-2); }
-  .copyrow button.icon.done { color: var(--ok); border-color: var(--ok); background: var(--ok-wash); }
-  details.panel summary { cursor: pointer; font-size: 17px; font-weight: 650; list-style: none; display: flex; align-items: center; gap: 10px; }
+  .copyrow b { font-size: 15px; font-weight: 700; }
+  .copyrow button.done { color: var(--clear); border-color: var(--clear); }
+  details.panel summary { cursor: pointer; font-size: var(--t-md); font-weight: 700; list-style: none; display: flex; align-items: center; gap: 10px; }
   details.panel summary::-webkit-details-marker { display: none; }
-  details.panel summary::before { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--ink-2); border-bottom: 2px solid var(--ink-2); transform: rotate(-45deg); transition: transform .2s var(--ease); margin-right: 4px; }
-  details.panel[open] summary::before { transform: rotate(45deg); }
+  details.panel summary svg { transition: transform .2s var(--ease); transform: rotate(-90deg); }
+  details.panel[open] summary svg { transform: none; }
   details.panel[open] summary { margin-bottom: 8px; }
   .presets { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 22px; }
-  .presets button { min-height: 34px; padding: 6px 14px; font-size: 14px; border-radius: 999px; }
-  .result { margin-top: 24px; border: 1px solid var(--line-2); border-radius: 12px; padding: 16px 20px; }
-  .result ul { margin: 10px 0 0; padding-left: 20px; }
-  .result.approved { border-color: var(--ok); background: var(--ok-wash); }
-  .result.needs_approval { border-color: var(--warn-line); background: var(--warn-wash); }
-  .result.blocked { border-color: var(--bad-line); background: var(--bad-wash); }
+  .presets button { min-height: 36px; padding: 6px 14px; font-size: var(--t-sm); }
+  .result { margin-top: 24px; border-left: 8px solid var(--rule-2); background: var(--strip-2); border-radius: 4px; padding: 14px 18px; display: grid; gap: 6px; justify-items: start; }
+  .result ul { margin: 4px 0 0; padding-left: 20px; }
+  .result.approved { border-left-color: var(--clear); }
+  .result.needs_approval { border-left-color: var(--hold); }
+  .result.blocked { border-left-color: var(--stop); }
+  .draft { display: grid; gap: 12px; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+  .draft-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .notes { margin: 0; padding: 12px 16px 12px 34px; border-left: 6px solid var(--hold); background: var(--hold-bg); border-radius: 4px; color: var(--hold); font-weight: 600; }
+  .notes.ok { list-style: none; padding-left: 16px; border-left-color: var(--clear); background: var(--clear-bg); color: var(--clear); }
 
-  /* ---- all agents ---- */
-  .agents { display: grid; gap: 12px; }
-  .agent { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.5fr) auto; gap: 10px 28px; align-items: center;
-           background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; cursor: pointer;
-           transition: border-color .15s var(--ease); }
-  .agent:hover { border-color: var(--line-2); }
-  .agent .open { all: unset; cursor: pointer; font-size: 17px; font-weight: 650; letter-spacing: -0.005em; }
-  .agent .open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-  .agent .meta { color: var(--ink-2); font-size: 14px; margin-top: 2px; }
-  .agent .state { font-weight: 650; }
-  .agent .state.revoked, .agent .state.expired { color: var(--bad); }
-  .agent [role=progressbar] { margin: 0 0 6px; }
-  .agent .side { display: grid; gap: 6px; justify-items: end; text-align: right; }
-  .agent button.waiting { background: var(--warn-wash); border-color: var(--warn-line); color: var(--warn); min-height: 40px; }
-  .agent button.waiting:hover { border-color: var(--warn); }
-  .agent .calm { color: var(--ink-3); font-size: 14px; }
-  .budget { display: inline-block; margin-top: 8px; border-radius: 6px; padding: 2px 10px; font-size: 13px; font-weight: 650;
-            background: var(--warn-wash); color: var(--warn); border: 1px solid var(--warn-line); }
-  .budget.full { background: var(--bad-wash); color: var(--bad); border-color: var(--bad-line); }
-  .totals { color: var(--ink-2); margin: 0 0 18px; }
-  .totals b { color: var(--ink); font-weight: 650; }
-  main.allagents .statement, main.allagents #waiting, main.allagents .layout, main.allagents #tryit { display: none; }
+  /* ---- views ---- */
+  main.signedout > :not(#banner):not(#login):not(#loading) { display: none; }
+  main.nomandate .hero, main.nomandate #waiting, main.nomandate #agents, main.nomandate .layout, main.nomandate #tryit { display: none; }
+  main.nomandate #create { max-width: 860px; width: 100%; }
+  main.allagents #tryit, main.allagents #mandate { display: none; }
+  main.allagents .layout { grid-template-columns: minmax(0, 1fr); }
+  main.allagents .layout > aside { position: static; }
+  main:not(.allagents) #agents { display: none; }
 
-  /* ---- first run: only the create form ---- */
-  main.nomandate .statement, main.nomandate #waiting, main.nomandate .layout, main.nomandate #tryit { display: none; }
-  main.nomandate #create { max-width: 820px; width: 100%; margin: 40px auto 0; }
-
-  /* ---- smaller screens ---- */
-  @media (max-width: 940px) {
+  /* ---- sizes ---- */
+  @media (min-width: 1600px) {
+    body { font-size: 17px; }
+    .wrap { max-width: 1560px; }
+    select { max-width: 320px; }
+    .item { grid-template-columns: 92px 160px minmax(0, 1fr) 170px; }
+  }
+  @media (max-width: 1100px) {
+    .hero { grid-template-columns: 1fr 1fr; }
+    .tile:nth-child(3) { border-left: 0; }
+    .tile:nth-child(n+3) { border-top: 1px solid var(--rule); }
     .layout { grid-template-columns: minmax(0, 1fr); }
     .layout > aside { position: static; }
   }
   @media (max-width: 720px) {
     .wrap { padding: 0 16px; }
-    .agent { grid-template-columns: 1fr; padding: 16px; }
-    .agent .side { justify-items: start; text-align: left; grid-auto-flow: column; justify-content: space-between; align-items: center; }
-    main { gap: 32px; }
-    .statement { padding-top: 24px; }
+    main#main { gap: 28px; padding-top: 16px; }
+    .crumb { display: none; }
+    .hdr { margin-left: 0; width: 100%; }
+    .hdr select { flex: 1 1 100%; max-width: none; }
     form.panel, section.panel, details.panel { padding: 20px 16px; }
+    .hero { border-left-width: 6px; }
+    .tile { padding: 12px 14px; }
+    .tile .val { font-size: 26px; }
     .row { grid-template-columns: 1fr 1fr; }
     .row > label:first-child { grid-column: 1 / -1; }
-    .pend { grid-template-columns: 1fr; padding: 16px; }
-    .btns button { flex: 1; min-height: 52px; font-size: 16px; }
-    /* On a phone, a payment waiting for a decision comes first. */
+    .pending, .feed-bay, .agents { padding: 6px; }
+    .pend { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; border-left-width: 8px; }
+    .btns button { flex: 1; min-height: 52px; }
     main.haspending #banner { order: -2; }
     main.haspending #waiting { order: -1; }
-    thead { display: none; }
-    tbody tr { display: grid; grid-template-columns: 1fr auto auto; column-gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
-    tbody tr:first-child { border-top: 0; }
-    tbody td { border: 0; padding: 0; }
-    td:nth-child(3) { grid-column: 1; grid-row: 1 / span 2; min-width: 0; }
-    td.amt { grid-column: 2 / 4; grid-row: 1; }
-    td:nth-child(4) { grid-column: 2 / 4; grid-row: 2; justify-self: end; margin-top: 6px; }
-    td:nth-child(1) { grid-column: 1; grid-row: 3; margin-top: 10px; }
-    td:nth-child(5) { grid-column: 2; grid-row: 3; margin-top: 10px; font-size: 14px; }
-    td:nth-child(5)::before { content: "risk "; color: var(--ink-3); }
-    td:nth-child(6) { grid-column: 3; grid-row: 3; margin-top: 10px; font-size: 14px; }
+    .agent { grid-template-columns: minmax(0, 1fr); padding: 14px 16px; border-left-width: 8px; }
+    .agent .side { justify-items: start; text-align: left; grid-auto-flow: column; justify-content: space-between; align-items: center; }
+    .item { grid-template-columns: minmax(0, 1fr) auto; border-left-width: 8px; }
+    .item > * { padding: 10px 14px; }
+    .item > * + * { border-left: 0; }
+    .item .main { grid-column: 1 / -1; grid-row: 2; border-top: 1px solid var(--rule); }
+    .item .when { grid-column: 1; grid-row: 1; }
+    .item .amt { grid-column: 2; grid-row: 1; }
+    .item .verdict { grid-column: 1 / -1; grid-row: 3; border-top: 1px solid var(--rule); grid-auto-flow: column; justify-content: space-between; align-items: center; }
+    .checks { padding-left: 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    tr.new td, .pend.fresh { animation: none; }
-    * { transition-duration: .01ms !important; }
+    *, *::before, *::after { animation: none !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
   }
 </style>
 </head>
@@ -268,27 +362,31 @@
 <header class="top">
   <div class="wrap topbar">
     <div class="brand">
-      <svg width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="Spend Firewall"><rect width="28" height="28" rx="7" fill="#232a36"/><path d="M6 14h9M12 9.5l4.5 4.5-4.5 4.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 7v14" stroke="#6b8cff" stroke-width="3" stroke-linecap="round"/></svg>
+      <svg width="28" height="28" viewBox="0 0 28 28" role="img" aria-label="Spend Firewall"><rect width="28" height="28" rx="7" style="fill: var(--logo)"/><path d="M6 14h9M12 9.5l4.5 4.5-4.5 4.5" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 7v14" stroke="#6b8cff" stroke-width="3" stroke-linecap="round"/></svg>
       <span>Spend Firewall</span>
     </div>
+    <span class="crumb" id="view-name" hidden></span>
     <div class="hdr">
-      <select id="msel" aria-label="Agent" hidden></select>
+      <select id="msel" aria-label="View" hidden></select>
       <button class="ghost" id="new-btn" type="button" hidden>New mandate</button>
-    <button class="ghost" id="signout" type="button" hidden>Sign out</button>
-      <span class="live" id="live" role="status">connecting…</span>
+      <button class="ghost icon" id="theme-btn" type="button" aria-label="Switch to dark theme" title="Switch to dark theme"></button>
+      <button class="ghost" id="signout" type="button" hidden>Sign out</button>
+      <span class="live down" id="live" role="status">Connecting…</span>
     </div>
   </div>
 </header>
-<main class="wrap nomandate" id="main">
+
+<main class="wrap signedout" id="main">
   <div id="banner" role="alert"></div>
+  <div id="loading" hidden>Loading…</div>
   <form id="login" class="panel">
     <label for="tok">Admin token<input id="tok" type="password" autocomplete="off" placeholder="Paste your ADMIN_TOKEN"></label>
-    <button class="approve" type="submit">Connect</button>
+    <button class="primary" type="submit">Sign in</button>
   </form>
 
   <form id="create" class="panel" hidden>
     <h2>New mandate</h2>
-    <p class="hint" id="create-hint">A mandate is the budget and the rules for one agent. The agent can spend only inside it and can never change it. One mandate uses one currency.</p>
+    <p class="hint" id="create-hint" style="margin-top:8px">A mandate is the budget and the rules for one agent. The agent can spend only inside it and can never change it. One mandate uses one currency.</p>
     <div class="draft">
       <label>Describe the rules in plain English<textarea id="rules-text" placeholder="My agent pays my weekly supplier invoices. Up to 50,000 a payment without asking me, never more than 300,000 in one payment, 1,000,000 a month. Pay Lagos Textiles at 0123456789."></textarea></label>
       <div class="draft-row">
@@ -307,60 +405,53 @@
       <label>Expires (optional)<input name="expiresAt" type="date"></label>
     </div>
     <h2>Who may be paid</h2>
-    <p class="hint">The address is whatever the payment rail understands: a wallet, an IBAN or an account number.</p>
+    <p class="hint" style="margin-top:6px">The address is whatever the payment rail understands: a wallet, an IBAN or an account number.</p>
     <div id="rows"></div>
     <button type="button" class="ghost" id="add-row">Add recipient</button>
     <div class="actions">
-      <button class="approve" type="submit">Create mandate</button>
+      <button class="primary" type="submit">Create mandate</button>
       <button type="button" class="ghost" id="cancel-create">Cancel</button>
     </div>
   </form>
 
   <section id="connect" class="panel" hidden aria-label="Connect an agent">
     <h2>Connect an agent</h2>
-    <p class="warn">This token lets an agent spend inside this mandate. Keep it secret.</p>
+    <p class="warn-text" style="margin-top:8px">This token lets an agent spend inside this mandate. Keep it secret.</p>
     <div id="connect-body"></div>
     <div class="actions"><button type="button" class="ghost" id="close-connect">Done</button></div>
   </section>
 
-  <section id="agents" aria-label="All agents" hidden>
-    <h2>All agents</h2>
-    <p class="totals" id="agents-totals"></p>
+  <section class="hero" id="hero" aria-label="This month at a glance"></section>
+
+  <section id="waiting" aria-labelledby="waiting-h">
+    <div class="section-head">
+      <h2 id="waiting-h" tabindex="-1">Waiting for you<span class="newflag" id="newflag" hidden>New</span></h2>
+      <span class="sub" id="waiting-sub"></span>
+    </div>
+    <div class="pending" id="pending"><div class="empty panel">Nothing waiting for you.</div></div>
+  </section>
+
+  <section id="agents" aria-labelledby="agents-h">
+    <div class="section-head"><h2 id="agents-h">All agents</h2><span class="sub" id="agents-sub"></span></div>
     <div class="agents" id="agent-list"></div>
   </section>
 
-  <section class="statement" aria-label="Totals">
-    <p class="statement-line">Paid out <b class="ok" id="c-settled">–</b> and stopped <b class="bad" id="c-blocked">–</b></p>
-    <p class="statement-sub"><span id="n-approved">0</span> approved · <span id="n-pending">0</span> waiting for you · <span id="n-blocked">0</span> blocked</p>
-    <p class="audit" id="audit" role="status" hidden></p>
-  </section>
-
-  <section id="waiting" aria-label="Pending approvals">
-    <h2>Waiting for you<span class="newflag" id="newflag" role="status" hidden>New</span></h2>
-    <div class="pending" id="pending"><div class="empty">Nothing waiting.</div></div>
-  </section>
-
   <div class="layout">
-    <section id="feedpanel" aria-label="Activity">
-      <h2>Activity</h2>
-      <div class="panel">
-        <div class="scroll">
-          <table>
-            <thead><tr><th>Time</th><th>Amount</th><th>Recipient and purpose</th><th>Verdict</th><th>Risk</th><th>Receipt</th></tr></thead>
-            <tbody id="feed"></tbody>
-          </table>
-        </div>
-        <div class="empty" id="feed-empty">No payment requests yet.</div>
+    <section id="activity" aria-labelledby="activity-h">
+      <div class="section-head">
+        <h2 id="activity-h">Activity</h2>
+        <div class="filters" id="filters" role="group" aria-label="Show"></div>
       </div>
+      <div class="feed-bay"><div class="feed" id="feed"></div><div class="empty" id="feed-empty" hidden></div></div>
     </section>
     <aside aria-label="Mandate">
-      <h2>Mandate</h2>
       <div class="panel" id="mandate"><div class="empty">Loading…</div></div>
+      <p class="audit" id="audit" role="status" hidden></p>
     </aside>
   </div>
 
   <details class="panel" id="tryit">
-    <summary>Test the firewall</summary>
+    <summary><span id="tryit-chevron"></span>Test the firewall</summary>
     <p class="hint">Sends a real request to the agent endpoint with this mandate's token, exactly as an agent would. Use it to see how a request is judged.</p>
     <div class="presets" id="presets"></div>
     <form id="tryform">
@@ -371,11 +462,15 @@
         <label class="wide">Context (the invoice or email the agent was reading)<textarea name="context"></textarea></label>
       </div>
       <datalist id="recips"></datalist>
-      <button class="approve" type="submit">Send request</button>
+      <button class="primary" type="submit">Send request</button>
     </form>
     <div id="tryresult" aria-live="polite"></div>
   </details>
 </main>
+
+<dialog id="detail" aria-labelledby="detail-title"><div class="dlg" id="detail-body"></div></dialog>
+<div id="toasts" role="status" aria-live="polite"></div>
+<div class="sr" id="announce" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -390,6 +485,9 @@ if (params.get("token")) saveToken(token);
 let mandateId = params.get("mandate") || "";
 if (params.has("token")) { params.delete("token"); history.replaceState(null, "", location.pathname + (params.size ? "?" + params : "")); }
 
+// Per-viewer conveniences in localStorage; the page works without them.
+const pref = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch { return null; } };
+
 const $ = (id) => document.getElementById(id);
 function h(tag, attrs, ...kids) {
   const el = document.createElement(tag);
@@ -397,72 +495,183 @@ function h(tag, attrs, ...kids) {
     if (k === "class") el.className = v; else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (v !== false && v != null) el.setAttribute(k, v);
   }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+  return el;
+}
+const SVG = "http://www.w3.org/2000/svg";
+function s(tag, attrs, ...kids) {
+  const el = document.createElementNS(SVG, tag);
+  for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
   for (const kid of kids.flat()) if (kid != null) el.append(kid);
   return el;
 }
-const fmt = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
-const money = (n, cur) => cur ? `${fmt(n)} ${cur}` : fmt(n);
-const short = (a) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+const ICONS = {
+  check: [["path", { d: "M4.5 10.5l3.6 3.6 7.4-8.2" }]],
+  clock: [["circle", { cx: 10, cy: 10, r: 7 }], ["path", { d: "M10 6.2v4l2.8 1.8" }]],
+  block: [["circle", { cx: 10, cy: 10, r: 7 }], ["path", { d: "M5.2 14.8l9.6-9.6" }]],
+  x: [["path", { d: "M6 6l8 8M14 6l-8 8" }]],
+  alert: [["path", { d: "M10 3.5l7 12.5H3z" }], ["path", { d: "M10 8.5v3.2M10 14v.01" }]],
+  minus: [["path", { d: "M5 10h10" }]],
+  copy: [["rect", { x: 7.5, y: 7.5, width: 9, height: 9, rx: 2 }], ["path", { d: "M12.5 7.5V5.5a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" }]],
+  sun: [["circle", { cx: 10, cy: 10, r: 3.4 }], ["path", { d: "M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4" }]],
+  moon: [["path", { d: "M16 12.3A6.5 6.5 0 0 1 7.7 4a6.5 6.5 0 1 0 8.3 8.3z" }]],
+  chevron: [["path", { d: "M6 8l4 4 4-4" }]],
+  shield: [["path", { d: "M10 2.8l6 2.4v4.4c0 3.6-2.5 6.3-6 7.6-3.5-1.3-6-4-6-7.6V5.2z" }], ["path", { d: "M7.3 10.2l1.9 1.9 3.6-3.9" }]],
+};
+const icon = (kind) => s("svg", { class: "i", viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", "stroke-width": 1.8, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" },
+  ICONS[kind].map(([tag, a]) => s(tag, a)));
 
-let mandate = null, currency = "", seen = null, lastPayments = [];
+// ---- formatting: the mandate's currency, never a hardcoded one ----
+const fmt = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const nf = new Map();
+function money(n, cur) {
+  if (!cur) return fmt(n);
+  if (!nf.has(cur)) {
+    try { nf.set(cur, new Intl.NumberFormat(undefined, { style: "currency", currency: cur, minimumFractionDigits: 0, maximumFractionDigits: 2 })); }
+    catch { nf.set(cur, null); } // not an ISO code (a token, say): plain "1,234.5 CODE"
+  }
+  const f = nf.get(cur);
+  return f ? f.format(n) : `${fmt(n)} ${cur}`;
+}
+const short = (a) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+function ago(iso) {
+  const sec = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+  if (sec < 60) return sec < 5 ? "just now" : `${sec} s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.round(min / 60);
+  return hr < 24 ? `${hr} h ago` : new Date(iso).toLocaleDateString();
+}
+const monthStartIso = () => { const n = new Date(); return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), 1)).toISOString(); };
+
+// ---- state ----
+let mandates = [];              // GET /api/mandates, newest first; no agent tokens
+let mandate = null;             // the open mandate, with its agent token (single view)
+let seen = null;                // payment ids already shown, to highlight new arrivals
+let lastPending = new Map();    // id → payment, waiting at the last poll
+const decidedHere = new Set();  // decided from this page, so "decided elsewhere" isn't announced
 const busy = new Set();
+let scrollToWaiting = false;
+let lastOk = 0, offline = false, loaded = false;
+let filter = pref("sf.filter") || "all";
+const openChecks = new Set();   // feed rows with their checks expanded
+
+const byId = (id) => mandates.find((m) => m.id === id) || (mandate && mandate.id === id ? mandate : null);
+function who(p) {
+  const m = byId(p.mandateId);
+  const r = m && m.allowlist.find((x) => x.address === p.recipient);
+  return r ? { label: r.label, sub: short(p.recipient), known: true } : { label: short(p.recipient), sub: "not on the allowlist", known: false };
+}
+const failed = (p) => p.checks.filter((c) => !c.pass);
+const agentName = (p) => byId(p.mandateId)?.name ?? p.mandateId;
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" } });
+  // A request that hangs (a server that died mid-connection) must not stall polling: give up after 5 s.
+  const res = await fetch(path, { ...opts, signal: AbortSignal.timeout(5000), headers: { authorization: `Bearer ${token}`, "content-type": "application/json" } });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) { const e = new Error(body.error || `HTTP ${res.status}`); e.status = res.status; throw e; }
   return body;
 }
 
-function who(address) {
-  const r = mandate && mandate.allowlist.find((x) => x.address === address);
-  return r ? { label: r.label, sub: short(address) } : { label: short(address), sub: "not on allowlist" };
+// ---- verdicts: an icon and a word, never colour alone ----
+function outcome(p) {
+  switch (p.status) {
+    case "settled": return { kind: "ok", icon: "check", word: "Paid" };
+    case "settling": return { kind: "ok", icon: "check", word: "Paying" };
+    case "pending_approval": return { kind: "warn", icon: "clock", word: "Waiting for you" };
+    case "denied": return { kind: "muted", icon: "x", word: "Denied" };
+    case "failed": return { kind: "bad", icon: "alert", word: "Not paid" };
+    default: return { kind: "bad", icon: "block", word: "Blocked" };
+  }
 }
-const failed = (p) => p.checks.filter((c) => !c.pass).map((c) => c.reason);
+const chip = (o) => h("span", { class: `chip ${o.kind}` }, icon(o.icon), o.word);
 
-function renderCounters(s, payments) {
-  $("c-settled").textContent = money(s.settledAmount, currency);
-  $("c-blocked").textContent = money(s.blockedAmount, currency);
-  $("n-approved").textContent = s.approved;
-  $("n-pending").textContent = payments.filter((p) => p.status === "pending_approval").length;
-  $("n-blocked").textContent = s.blocked;
+const CHECK_NAME = {
+  amount_valid: "Valid amount", currency: "Currency", mandate_active: "Mandate active", allowlist: "Recipient on the allowlist",
+  hard_max: "Hard limit", monthly_cap: "Monthly cap", auto_approve: "Auto-approve limit", velocity: "Request rate",
+  anomaly: "Usual amount for this recipient", duplicate: "Not a duplicate", cumulative: "No split payments",
+  injection: "AI intent check: prompt injection", intent: "AI intent check: fits the task", settlement: "Settlement",
+};
+const CHECK_SHORT = {
+  allowlist: "unknown recipient", injection: "possible prompt injection", hard_max: "over the hard limit", monthly_cap: "over the monthly cap",
+  currency: "wrong currency", mandate_active: "mandate not active", amount_valid: "invalid amount", auto_approve: "over the auto-approve limit",
+  velocity: "too many requests", anomaly: "unusually large for this recipient", duplicate: "possible duplicate", cumulative: "possible split payment",
+  intent: "may not fit the agent's task", settlement: "settlement failed",
+};
+const SEVERITY = { block: "blocks the payment", escalate: "asks a human", info: "for information" };
+const shortOf = (c) => (c.name === "intent" && /unavailable/i.test(c.reason) ? "AI check unavailable" : CHECK_SHORT[c.name] || c.reason);
+function listing(xs) { return xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`; }
+// "Blocked: unknown recipient and possible prompt injection."
+function summary(p) {
+  const fails = failed(p).sort((a, b) => (a.severity === "block" ? 0 : 1) - (b.severity === "block" ? 0 : 1));
+  const phrases = [...new Set(fails.map(shortOf))];
+  const word = outcome(p).word;
+  if (!phrases.length) return `${word}: every check passed.`;
+  const text = listing(phrases);
+  return `${word}: ${text.charAt(0).toLowerCase() + text.slice(1)}.`;
+}
+function checksList(p) {
+  const order = [...p.checks].sort((a, b) => Number(a.pass) - Number(b.pass) || (a.severity === "block" ? -1 : 1));
+  return h("ul", { class: "checks" }, order.map((c) => h("li", { class: c.pass ? "pass" : `fail ${c.severity}` },
+    icon(c.pass ? "check" : c.severity === "escalate" ? "clock" : "x"),
+    h("div", {}, h("b", {}, CHECK_NAME[c.name] || c.name), " ",
+      h("span", { class: "sev" }, c.pass ? "passed" : `failed, ${SEVERITY[c.severity] || c.severity}`),
+      h("div", {}, c.reason)))));
+}
+function risk(p) {
+  const lvl = p.risk >= 60 ? "hi" : p.risk >= 20 ? "mid" : "";
+  return h("div", { class: `risk ${lvl}`, title: "Risk score, 0 to 100 (for display; the checks decide)" },
+    h("span", {}, `Risk ${p.risk}`),
+    h("div", { class: "meter", role: "img", "aria-label": `Risk ${p.risk} of 100` }, h("div", { style: `width:${Math.min(100, p.risk)}%` })));
 }
 
-function renderMandate(m, s, limits) {
-  const spent = s.settledAmount, cap = m.monthlyCap;
-  const pct = cap > 0 ? Math.min(100, (spent / cap) * 100) : 0;
-  $("mandate").replaceChildren(
-    h("div", { class: "name" }, m.name + (m.status === "revoked" ? " (revoked)" : "")),
-    h("div", { class: "task" }, m.task),
-    budgetBadge(limits && limits.budget),
-    h("dl", {},
-      h("dt", {}, "Currency"), h("dd", {}, m.currency),
-      h("dt", {}, "Auto-approve up to"), h("dd", {}, money(m.autoApproveMax, m.currency)),
-      h("dt", {}, "Hard limit"), h("dd", {}, money(m.hardMax, m.currency)),
-      h("dt", {}, "Monthly cap"), h("dd", {}, money(cap, m.currency)),
-    ),
-    h("div", { class: "bar", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": cap, "aria-valuenow": spent },
-      h("div", { style: `width:${pct}%` })),
-    h("div", { class: "bar-label" }, h("span", {}, `Settled ${money(spent, m.currency)}`), h("span", {}, `Remaining ${money(Math.max(0, cap - spent), m.currency)}`)),
-    h("div", { class: "chips" }, m.allowlist.map((r) => h("span", { class: "chip", title: r.address }, r.label))),
-    h("div", { class: "mandate-actions" },
-      h("button", { class: "ghost", type: "button", onclick: () => showConnect(m) }, "Connect an agent"),
-      m.status === "active" ? revokeButton(m) : null),
-  );
+// Re-rendering replaces elements; put keyboard focus back on the control with the same key.
+function keepFocus(render) {
+  const key = document.activeElement?.dataset?.key;
+  render();
+  if (key) document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
 }
 
-async function decide(id, action, btns) {
-  if (busy.has(id)) return;
-  busy.add(id); btns.forEach((b) => (b.disabled = true));
-  try { await api(`/api/payments/${encodeURIComponent(id)}/${action}`, { method: "POST" }); showError(""); }
-  catch (e) { showError(`Could not ${action} payment: ${e.message}`); }
-  finally { busy.delete(id); await refresh(); }
+// ---- messages ----
+function showError(msg) { $("banner").textContent = msg; $("banner").classList.toggle("show", !!msg); }
+function toast(msg, kind = "") {
+  const t = h("div", { class: "toast" }, kind ? icon(kind) : null, msg);
+  $("toasts").append(t);
+  setTimeout(() => t.remove(), 5000);
 }
+function announce(msg) { $("announce").textContent = ""; setTimeout(() => { $("announce").textContent = msg; }, 50); }
+function renderLive() {
+  const el = $("live");
+  el.classList.toggle("idle", !token);
+  if (!token) { el.textContent = "Signed out"; el.classList.remove("down"); return; }
+  if (offline || !lastOk) { el.textContent = loaded ? "Offline" : "Connecting…"; el.classList.add("down"); return; }
+  const sec = Math.round((Date.now() - lastOk) / 1000);
+  el.textContent = `Live, updated ${sec < 1 ? "just now" : `${sec} s ago`}`;
+  el.classList.remove("down");
+}
+setInterval(renderLive, 1000);
 
-// A short beep when a payment starts waiting. Browsers allow sound only after the first tap on the page.
+// ---- theme: system by default, a remembered manual choice wins ----
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  const dark = t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = dark ? "light" : "dark";
+  $("theme-btn").replaceChildren(icon(dark ? "sun" : "moon"));
+  $("theme-btn").setAttribute("aria-label", `Switch to ${next} theme`);
+  $("theme-btn").title = `Switch to ${next} theme`;
+}
+applyTheme(pref("sf.theme"));
+$("theme-btn").addEventListener("click", () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const t = dark ? "light" : "dark";
+  pref("sf.theme", t);
+  applyTheme(t);
+});
+$("tryit-chevron").replaceWith(icon("chevron"));
+
+// ---- a short beep when a payment starts waiting (browsers allow sound only after a tap) ----
 let audio = null;
-const unlockAudio = () => { try { audio = audio || new AudioContext(); audio.resume(); } catch { /* no sound: the banner still shows */ } };
-document.addEventListener("pointerdown", unlockAudio, { once: true });
+document.addEventListener("pointerdown", () => { try { audio = audio || new AudioContext(); audio.resume(); } catch { /* no sound */ } }, { once: true });
 function beep() {
   if (!audio || audio.state !== "running") return;
   const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
@@ -481,70 +690,289 @@ function announceNew() {
   beep();
 }
 
+// ---- hero strip: four real figures; amounts grouped by currency, never added across ----
+function heroData(payments, ms, limitsList) {
+  const since = monthStartIso();
+  const byCur = new Map();
+  const cur = (c) => { if (!byCur.has(c)) byCur.set(c, { paid: 0, paidN: 0, waiting: 0, blocked: 0, remaining: 0, cap: 0 }); return byCur.get(c); };
+  ms.forEach((m, i) => { const g = cur(m.currency); g.remaining += limitsList[i].remaining; g.cap += limitsList[i].monthlyCap; });
+  let waitingN = 0, blockedN = 0;
+  for (const p of payments) {
+    if (!byId(p.mandateId)) continue;
+    const g = cur(p.currency);
+    if (p.status === "pending_approval") { waitingN++; g.waiting += p.amount; }
+    if (p.createdAt < since) continue;
+    if (p.status === "settled") { g.paid += p.amount; g.paidN++; }
+    if (p.verdict === "blocked") { blockedN++; g.blocked += p.amount; }
+  }
+  return { byCur, waitingN, blockedN, paidN: [...byCur.values()].reduce((n, g) => n + g.paidN, 0) };
+}
+function amounts(byCur, key) {
+  const rows = [...byCur].filter(([, g]) => g[key] > 0);
+  if (!rows.length) return [h("div", { class: "val" }, byCur.size === 1 ? money(0, [...byCur.keys()][0]) : "None yet")].map((el) => { if (byCur.size !== 1) el.classList.add("small"); return el; });
+  return [h("div", { class: rows.length > 1 ? "lines" : "" }, rows.map(([c, g]) => h("div", { class: "val" }, money(g[key], c))))];
+}
+function renderHero(payments, ms, limitsList) {
+  const d = heroData(payments, ms, limitsList);
+  const waitingAmt = [...d.byCur].filter(([, g]) => g.waiting > 0).map(([c, g]) => money(g.waiting, c)).join(", ");
+  const blockedAmt = [...d.byCur].filter(([, g]) => g.blocked > 0).map(([c, g]) => money(g.blocked, c)).join(", ");
+  const many = d.byCur.size > 1;
+  const budgets = [...d.byCur].filter(([, g]) => g.cap > 0).map(([c, g]) => {
+    const used = Math.min(100, Math.floor(((g.cap - g.remaining) / g.cap) * 100));
+    return h("div", {},
+      h("div", { class: many ? "val" : "val small" }, `${money(g.remaining, c)} left`),
+      h("div", { class: `meter ${used >= 100 ? "full" : used >= 80 ? "warn" : ""}`, role: "img", "aria-label": `${used}% of the monthly budget used` }, h("div", { style: `width:${used}%` })),
+      h("div", { class: "note" }, `${used}% of ${money(g.cap, c)} used`));
+  });
+  const waitTile = h("div", { class: `tile waiting ${d.waitingN ? "on" : ""}` },
+    h("div", { class: "lbl" }, icon("clock"), "Waiting for you"),
+    h("div", { class: "val" }, String(d.waitingN)),
+    h("div", { class: "note" }, d.waitingN ? waitingAmt : "Nothing to decide"),
+    d.waitingN ? h("button", { class: "ghost", type: "button", "data-key": "review", onclick: () => { $("waiting").scrollIntoView({ behavior: "smooth" }); $("waiting-h").focus({ preventScroll: true }); } }, "Review") : null);
+  $("hero").replaceChildren(
+    h("div", { class: "tile paid" }, h("div", { class: "lbl" }, icon("check"), "Paid out this month"), ...amounts(d.byCur, "paid"),
+      h("div", { class: "note" }, `${d.paidN} payment${d.paidN === 1 ? "" : "s"} settled`)),
+    waitTile,
+    h("div", { class: "tile blocked" }, h("div", { class: "lbl" }, icon("block"), "Blocked this month"), h("div", { class: "val" }, String(d.blockedN)),
+      h("div", { class: "note" }, d.blockedN ? `${blockedAmt} stopped` : "Nothing blocked")),
+    h("div", { class: "tile" }, h("div", { class: "lbl" }, icon("shield"), "Budget left this month"), many ? h("div", { class: "budgets" }, budgets) : budgets));
+}
+
+// ---- waiting for you: the main job ----
+async function decide(p, action, btns, card) {
+  if (busy.has(p.id)) return;
+  busy.add(p.id);
+  btns.forEach((b) => { b.disabled = true; b.setAttribute("aria-busy", "true"); });
+  btns[action === "approve" ? 0 : 1].textContent = action === "approve" ? "Approving…" : "Denying…";
+  try {
+    const r = await api(`/api/payments/${encodeURIComponent(p.id)}/${action}`, { method: "POST" });
+    decidedHere.add(p.id);
+    showError("");
+    const last = r.checks.at(-1);
+    if (r.status === "settled") toast(`Approved and settled. Ref ${short(r.reference || "")}`, "check");
+    else if (action === "deny") toast(`Denied. ${money(r.amount, r.currency)} was not paid.`, "x");
+    else toast(`Not paid: ${last && !last.pass ? last.reason : r.status}`, "alert");
+    card.classList.add("leaving");
+    await new Promise((res) => setTimeout(res, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 300));
+  } catch (e) {
+    showError(`Could not ${action} the payment: ${e.message}`);
+  } finally {
+    busy.delete(p.id);
+    await refresh(true);
+    const next = document.querySelector("#pending button.primary");
+    (next || $("waiting-h")).focus({ preventScroll: true });
+  }
+}
+
 function renderPending(payments) {
-  const pend = payments.filter((p) => p.status === "pending_approval");
+  const pend = payments.filter((p) => p.status === "pending_approval" && byId(p.mandateId)).reverse(); // oldest first
   const arrived = new Set(seen ? pend.filter((p) => !seen.has(p.id)).map((p) => p.id) : []);
   if (arrived.size) announceNew();
+  // A payment that stopped waiting without being decided here was decided somewhere else.
+  const now = new Map(payments.map((p) => [p.id, p]));
+  for (const [id] of lastPending) {
+    const p = now.get(id);
+    if (p && p.status !== "pending_approval" && !decidedHere.has(id)) toast(`Decided elsewhere (Telegram or another screen): ${outcome(p).word.toLowerCase()}, ${money(p.amount, p.currency)} to ${who(p).label}`, outcome(p).icon);
+  }
+  lastPending = new Map(pend.map((p) => [p.id, p]));
   $("main").classList.toggle("haspending", pend.length > 0);
-  document.title = pend.length ? `(${pend.length}) Spend Firewall` : "Spend Firewall";
-  if (!pend.length) { $("pending").replaceChildren(h("div", { class: "empty" }, "Nothing waiting.")); return; }
+  const total = pend.length;
+  $("waiting-sub").textContent = total ? `${total} payment${total === 1 ? "" : "s"} held for your decision` : "";
+  document.title = total ? `(${total}) Spend Firewall` : "Spend Firewall";
+  if (!total) { $("pending").replaceChildren(h("div", { class: "empty panel" }, "Nothing waiting for you. Payments over a limit or flagged by a check will appear here.")); return; }
   $("pending").replaceChildren(...pend.map((p) => {
-    const w = who(p.recipient);
-    const approve = h("button", { class: "approve", type: "button" }, "Approve");
-    const deny = h("button", { class: "deny", type: "button" }, "Deny");
+    const w = who(p);
+    const approve = h("button", { class: "primary", type: "button", "data-key": `approve:${p.id}` }, icon("check"), "Approve");
+    const deny = h("button", { class: "deny", type: "button", "data-key": `deny:${p.id}` }, icon("x"), "Deny");
     const btns = [approve, deny];
-    approve.addEventListener("click", () => decide(p.id, "approve", btns));
-    deny.addEventListener("click", () => decide(p.id, "deny", btns));
-    return h("div", { class: arrived.has(p.id) ? "pend fresh" : "pend" },
+    const card = h("article", { class: arrived.has(p.id) ? "pend fresh" : "pend", "aria-label": `${money(p.amount, p.currency)} to ${w.label}, waiting for you` },
       h("div", {},
         h("div", { class: "amt" }, money(p.amount, p.currency)),
-        h("div", { class: "meta" }, `${w.label} · ${p.purpose}`),
-        failed(p).length ? h("div", { class: "why" }, failed(p).join(" · ")) : null),
+        h("div", { class: "to" }, `to ${w.label}`, w.known ? null : h("span", { class: "sub" }, ` (${w.sub})`)),
+        h("div", { class: "meta" }, `For: ${p.purpose}`),
+        h("div", { class: "meta" }, `${agentName(p)}, waiting ${ago(p.createdAt).replace(" ago", "")}`),
+        failed(p).length ? h("div", { class: "why" }, "Held because:", h("ul", {}, failed(p).map((c) => h("li", {}, c.reason)))) : null),
       h("div", { class: "btns" }, approve, deny));
+    approve.addEventListener("click", () => decide(p, "approve", btns, card));
+    deny.addEventListener("click", () => decide(p, "deny", btns, card));
+    return card;
   }));
 }
 
-const VERDICT = { approved: "Approved", needs_approval: "Needs approval", blocked: "Blocked" };
-const STATUS = { pending_approval: "waiting for a human", settling: "settling", settled: "settled", blocked: "", denied: "denied by a human", failed: "settlement failed" };
-
-function renderFeed(payments) {
-  const fresh = new Set(seen ? payments.filter((p) => !seen.has(p.id)).map((p) => p.id) : []);
-  $("feed-empty").style.display = payments.length ? "none" : "";
-  $("feed").replaceChildren(...payments.map((p) => {
-    const w = who(p.recipient);
-    const reasons = failed(p);
-    const receipt = p.receiptUrl ? h("a", { href: p.receiptUrl, target: "_blank", rel: "noopener noreferrer" }, "view")
-      : p.reference ? h("span", { title: p.reference }, short(p.reference)) : "";
-    const tr = h("tr", { class: fresh.has(p.id) ? `new v-${p.verdict === "blocked" ? "blocked" : "other"}` : "" },
-      h("td", {}, new Date(p.createdAt).toLocaleTimeString()),
-      h("td", { class: "amt" }, money(p.amount, p.currency)),
-      h("td", {},
-        h("div", {}, w.label, " ", h("span", { class: "sub" }, w.sub)),
-        h("div", { class: "sub" }, p.purpose),
-        reasons.length ? h("div", { class: `reasons ${p.verdict === "blocked" ? "" : "amber"}` }, reasons.join(" · ")) : null),
-      h("td", {}, h("span", { class: `badge ${p.verdict}` }, VERDICT[p.verdict] || p.verdict),
-        STATUS[p.status] && p.verdict !== "blocked" ? h("div", { class: "st" }, STATUS[p.status]) : null),
-      h("td", {}, p.risk),
-      h("td", {}, receipt));
-    return tr;
+// ---- activity feed ----
+const FILTERS = [["all", "All"], ["paid", "Paid"], ["held", "Held"], ["blocked", "Blocked"]];
+const matches = (p) => filter === "all" || (filter === "paid" ? p.status === "settled" || p.status === "settling"
+  : filter === "held" ? p.verdict === "needs_approval" : p.verdict === "blocked");
+function renderFilters() {
+  $("filters").replaceChildren(...FILTERS.map(([k, label]) => h("button", { type: "button", "aria-pressed": String(filter === k), "data-key": `filter:${k}`,
+    onclick: () => { filter = k; pref("sf.filter", k); keepFocus(() => { renderFilters(); renderFeed(lastFeed, false); }); } }, label)));
+}
+let lastFeed = [];
+function renderFeed(payments, fromPoll = true) {
+  lastFeed = payments;
+  const all = !mandateId;
+  const fresh = new Set(seen && fromPoll ? payments.filter((p) => !seen.has(p.id)).map((p) => p.id) : []);
+  for (const p of payments) {
+    if (fresh.has(p.id) && p.verdict === "blocked") {
+      const w = who(p);
+      const why = failed(p).some((c) => c.name === "injection") ? "Possible prompt injection." : `${failed(p)[0]?.reason ?? ""}`;
+      announce(`Blocked: ${money(p.amount, p.currency)} to ${w.known ? w.label : "an unknown recipient"}. ${why}`);
+    }
+  }
+  const shown = payments.filter(matches);
+  $("feed-empty").hidden = shown.length > 0;
+  $("feed-empty").textContent = payments.length ? "No payments match this filter." : "No payments yet. Connect an agent or use Test the firewall.";
+  $("feed").replaceChildren(...shown.map((p) => {
+    const w = who(p);
+    const o = outcome(p);
+    const fails = failed(p);
+    const expanded = openChecks.has(p.id);
+    const detailBtn = h("button", { class: "quiet", type: "button", "data-key": `detail:${p.id}`, onclick: () => openDetail(p) }, p.verdict === "blocked" ? "Why blocked" : "Details");
+    const checksBtn = h("button", { class: "quiet", type: "button", "aria-expanded": String(expanded), "data-key": `checks:${p.id}`, onclick: () => {
+      expanded ? openChecks.delete(p.id) : openChecks.add(p.id); keepFocus(() => renderFeed(lastFeed, false));
+    } }, `${expanded ? "Hide" : "All"} ${p.checks.length} checks`);
+    const receipt = p.receiptUrl ? h("a", { href: p.receiptUrl, target: "_blank", rel: "noopener noreferrer" }, "Receipt")
+      : p.reference ? h("span", { class: "ref", title: p.reference }, `Ref ${short(p.reference)}`) : null;
+    const tone = p.verdict === "blocked" || p.status === "failed" ? "v-row-blocked" : p.status === "pending_approval" ? "v-row-held" : p.status === "denied" ? "v-row-void" : "";
+    return h("div", { class: `item ${tone} ${fresh.has(p.id) ? `new v-${p.verdict === "blocked" ? "blocked" : "other"}` : ""}`, "data-id": p.id },
+      h("div", { class: "when", title: new Date(p.createdAt).toLocaleString() }, new Date(p.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" })),
+      h("div", { class: "amt" }, money(p.amount, p.currency)),
+      h("div", { class: "main" },
+        h("div", { class: "who" }, w.label, w.known ? h("span", { class: "addr" }, w.sub) : h("span", { class: "addr" }, "not on the allowlist")),
+        h("div", { class: "purpose" }, p.purpose),
+        all ? h("div", { class: "sub" }, agentName(p)) : null,
+        p.verdict === "blocked" && fails[0] ? h("div", { class: "reason" }, summary(p).replace(/^Blocked: /, "Blocked: ")) : null,
+        p.verdict === "needs_approval" && fails[0] ? h("div", { class: "reason held" }, `${p.status === "pending_approval" ? "Held" : "Was held"}: ${listing([...new Set(fails.map(shortOf))])}.`) : null,
+        h("div", { class: "tools" }, detailBtn, checksBtn)),
+      h("div", { class: "verdict" }, chip(o), risk(p), receipt),
+      expanded ? checksList(p) : null);
   }));
-  seen = new Set(payments.map((p) => p.id));
+  if (fromPoll) seen = new Set(payments.map((p) => p.id));
+}
+
+// ---- why it was blocked: the detail dialog (native modal: focus stays inside, Esc closes) ----
+let detailFor = null;
+function openDetail(p) {
+  detailFor = p.id;
+  const w = who(p);
+  const o = outcome(p);
+  const close = h("button", { class: "ghost", type: "button", onclick: () => $("detail").close() }, icon("x"), "Close");
+  $("detail-body").replaceChildren(
+    h("div", { class: "dlg-head" }, h("h2", { id: "detail-title" }, `${money(p.amount, p.currency)} to ${w.label}`), close),
+    h("div", { class: `summary ${o.kind}` }, summary(p)),
+    h("dl", { class: "facts" },
+      h("dt", {}, "Recipient"), h("dd", {}, w.known ? `${w.label} (${p.recipient})` : `${p.recipient} (not on the allowlist)`),
+      h("dt", {}, "Agent"), h("dd", {}, agentName(p)),
+      h("dt", {}, "Purpose"), h("dd", {}, p.purpose),
+      h("dt", {}, "When"), h("dd", {}, new Date(p.createdAt).toLocaleString()),
+      h("dt", {}, "Outcome"), h("dd", {}, chip(o)),
+      p.reference ? [h("dt", {}, "Reference"), h("dd", { class: "ref" }, p.reference)] : null),
+    h("div", {}, h("h3", {}, "Untrusted content the agent read"),
+      p.context ? h("pre", { class: "untrusted", tabindex: "0", "aria-label": "Untrusted content the agent read" }, p.context)
+        : h("p", { class: "sub" }, "The agent sent no content with this request.")),
+    h("div", {}, h("h3", {}, "Every check, failing first"), checksList(p)));
+  $("detail").className = o.kind === "bad" ? "stop" : o.kind === "warn" ? "hold" : "";
+  $("detail").showModal();
+  close.focus();
+}
+$("detail").addEventListener("close", () => { document.querySelector(`[data-key="detail:${CSS.escape(detailFor || "")}"]`)?.focus(); });
+$("detail").addEventListener("click", (e) => { if (e.target === $("detail")) $("detail").close(); });
+
+// ---- the open mandate ----
+function spendChart(m, payments) {
+  const now = new Date();
+  const days = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  const since = monthStartIso();
+  const perDay = new Array(days).fill(0);
+  for (const p of payments) if (p.status === "settled" && p.createdAt >= since) perDay[new Date(p.createdAt).getUTCDate() - 1] += p.amount;
+  const total = perDay.reduce((a, b) => a + b, 0);
+  if (!total) return h("p", { class: "sub" }, "No settled payments yet this month.");
+  const max = Math.max(...perDay), W = 300, H = 110, L = 4, B = 18, bw = (W - L) / days;
+  const top = perDay.indexOf(max) + 1;
+  const label = `Settled spend per day this month: ${money(total, m.currency)} in total; highest ${money(max, m.currency)} on day ${top}.`;
+  return h("figure", { style: "margin:16px 0 0" },
+    h("figcaption", { class: "sub" }, `Settled per day this month (peak ${money(max, m.currency)})`),
+    s("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": label },
+      s("title", {}, label),
+      s("line", { class: "axis", x1: L, y1: H - B, x2: W, y2: H - B }),
+      perDay.map((v, i) => v ? s("rect", { class: "bar", x: L + i * bw + 1, y: H - B - (v / max) * (H - B - 6), width: Math.max(1, bw - 2), height: (v / max) * (H - B - 6), rx: 1.5 },
+        s("title", {}, `Day ${i + 1}: ${money(v, m.currency)}`)) : null),
+      [1, Math.ceil(days / 2), days].map((d) => s("text", { x: L + (d - 0.5) * bw, y: H - 4, "text-anchor": "middle" }, String(d)))));
+}
+
+const budgetBadge = (b) => b && b.text ? h("span", { class: `budget ${b.level}`, role: "status" }, icon(b.level === "full" ? "block" : "alert"), b.text) : null;
+const stateOf = (m, now = new Date()) => m.status === "revoked" ? "revoked" : m.expiresAt && Date.parse(m.expiresAt) <= now.getTime() ? "expired" : "active";
+const STATE_WORD = { active: "Active", revoked: "Revoked", expired: "Expired" };
+
+function renderMandate(m, limits, payments) {
+  const used = limits.monthlyCap > 0 ? Math.min(100, Math.floor((limits.spentThisMonth / limits.monthlyCap) * 100)) : 0;
+  const st = stateOf(m);
+  $("mandate").replaceChildren(...h("div", {},
+    h("div", { class: "name" }, m.name),
+    h("div", { class: "sub inline" }, h("span", { class: `state ${st}` }, STATE_WORD[st]), h("span", {}, m.currency), m.expiresAt ? h("span", {}, `Expires ${new Date(m.expiresAt).toLocaleDateString()}`) : null),
+    h("div", { class: "task" }, m.task),
+    budgetBadge(limits.budget),
+    h("div", { class: `meter ${used >= 100 ? "full" : used >= 80 ? "warn" : ""}`, role: "progressbar", "aria-valuemin": 0, "aria-valuemax": limits.monthlyCap, "aria-valuenow": limits.spentThisMonth, "aria-label": "Monthly budget used", style: "margin-top:16px" },
+      h("div", { style: `width:${used}%` })),
+    h("div", { class: "bar-label" }, h("span", {}, `${money(limits.spentThisMonth, m.currency)} used (${used}%)`), h("span", {}, `${money(limits.remaining, m.currency)} left`)),
+    h("dl", {},
+      h("dt", {}, "Auto-approve up to"), h("dd", {}, money(m.autoApproveMax, m.currency)),
+      h("dt", {}, "Hard limit"), h("dd", {}, money(m.hardMax, m.currency)),
+      h("dt", {}, "Monthly cap"), h("dd", {}, money(m.monthlyCap, m.currency))),
+    spendChart(m, payments),
+    h("div", { class: "tags", "aria-label": "May be paid" }, m.allowlist.map((r) => h("span", { class: "tag", title: r.address }, r.label))),
+    h("div", { class: "mandate-actions" },
+      h("button", { class: "ghost", type: "button", onclick: () => showConnect(m) }, "Connect an agent"),
+      m.status === "active" ? revokeButton(m) : null)).childNodes);
 }
 
 function renderAudit(a) {
   const el = $("audit");
   el.hidden = false;
   el.classList.toggle("broken", !a.ok);
-  el.textContent = a.ok ? `✓ Audit log verified · ${a.entries} entries, hash-chained` : `✗ Audit log broken at entry ${a.brokenAt}: a record was changed or deleted`;
+  el.replaceChildren(icon(a.ok ? "shield" : "alert"), a.ok ? `Audit log verified: ${a.entries} entries, hash-chained` : `Audit log broken at entry ${a.brokenAt}: a record was changed or deleted`);
 }
 
-function showError(msg) { $("banner").textContent = msg; $("banner").classList.toggle("show", !!msg); }
-function setLive(ok, text) { const el = $("live"); el.textContent = text; el.classList.toggle("down", !ok); }
+// ---- all agents ----
+function agentSummary(m, limits, payments) {
+  const since = monthStartIso();
+  const mine = payments.filter((p) => p.mandateId === m.id);
+  return {
+    m, state: stateOf(m), spent: limits.spentThisMonth, cap: limits.monthlyCap, remaining: limits.remaining, budget: limits.budget,
+    pct: limits.monthlyCap > 0 ? Math.floor((limits.spentThisMonth / limits.monthlyCap) * 100) : 0,
+    waiting: mine.filter((p) => p.status === "pending_approval").length,
+    blocked: mine.filter((p) => p.verdict === "blocked" && p.createdAt >= since).length,
+    last: mine[0]?.createdAt ?? null,
+  };
+}
+function agentCard(a) {
+  const open = () => switchTo(a.m.id);
+  return h("article", { class: `agent ${a.waiting ? "has-waiting" : ""} ${a.state !== "active" ? "is-stopped" : ""}`, onclick: open },
+    h("div", {},
+      h("button", { class: "open", type: "button", "data-key": `agent:${a.m.id}`, onclick: (e) => { e.stopPropagation(); open(); } }, a.m.name),
+      h("div", { class: "meta" }, h("span", {}, a.m.currency), h("span", { class: `state ${a.state}` }, STATE_WORD[a.state]),
+        h("span", {}, a.last ? `Last request ${ago(a.last)}` : "No requests yet"))),
+    h("div", {},
+      h("div", { class: `meter ${a.pct >= 100 ? "full" : a.pct >= 80 ? "warn" : ""}`, role: "progressbar", "aria-valuemin": 0, "aria-valuemax": a.cap, "aria-valuenow": a.spent, "aria-label": `${a.m.name}: monthly budget used` },
+        h("div", { style: `width:${Math.min(100, a.pct)}%` })),
+      h("div", { class: "bar-label" },
+        h("span", {}, `${money(a.spent, a.m.currency)} of ${money(a.cap, a.m.currency)} this month (${a.pct}%)`),
+        h("span", {}, `${money(a.remaining, a.m.currency)} left`)),
+      budgetBadge(a.budget)),
+    h("div", { class: "side" },
+      a.waiting
+        ? h("button", { class: "waiting", type: "button", "data-key": `waiting:${a.m.id}`, onclick: (e) => { e.stopPropagation(); scrollToWaiting = true; open(); } }, icon("clock"), `${a.waiting} waiting for you`)
+        : h("span", { class: "calm" }, "Nothing waiting"),
+      h("span", { class: "calm" }, `${a.blocked} blocked this month`)));
+}
+function renderAgents(rows) {
+  // Agents with payments waiting first, then by last activity.
+  rows.sort((x, y) => (y.waiting > 0) - (x.waiting > 0) || (y.last ?? "").localeCompare(x.last ?? ""));
+  $("agents-sub").textContent = `${rows.length} agents, each with its own budget and rules`;
+  $("agent-list").replaceChildren(...rows.map(agentCard));
+}
 
-// ---- agents: every mandate, from the server ----
-let mandates = [];              // GET /api/mandates, newest first; no agent tokens
-let scrollToWaiting = false;
-
+// ---- header and views ----
 function renderSelector() {
   const sel = $("msel");
   const all = mandates.length > 1 ? [h("option", { value: "", ...(mandateId ? {} : { selected: "" }) }, "All agents")] : [];
@@ -552,89 +980,33 @@ function renderSelector() {
   sel.hidden = mandates.length < 2;
   $("new-btn").hidden = !token;
   $("signout").hidden = !token;
+  const name = mandateId ? byId(mandateId)?.name : mandates.length ? "All agents" : "";
+  $("view-name").hidden = !name || !sel.hidden; // the switcher already names the view
+  $("view-name").textContent = name || "";
 }
 $("msel").addEventListener("change", (e) => switchTo(e.target.value));
 function switchTo(id) {
-  mandateId = id; mandate = null; seen = null;
+  mandateId = id; mandate = null; seen = null; lastPending = new Map(); openChecks.clear();
   $("tryresult").replaceChildren(); $("connect").hidden = true;
-  refresh();
+  const u = new URL(location.href); id ? u.searchParams.set("mandate", id) : u.searchParams.delete("mandate"); history.replaceState(null, "", u);
+  refresh(true);
 }
-
-const stateOf = (m, now) => m.status === "revoked" ? "revoked" : m.expiresAt && Date.parse(m.expiresAt) <= now.getTime() ? "expired" : "active";
-
-// One agent's month at a glance. Month boundaries are UTC, like the monthly cap.
-function agentSummary(m, limits, payments, now) {
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-  const mine = payments.filter((p) => p.mandateId === m.id);
-  return {
-    m, state: stateOf(m, now), spent: limits.spentThisMonth, cap: limits.monthlyCap, remaining: limits.remaining, budget: limits.budget,
-    pct: limits.monthlyCap > 0 ? Math.round((limits.spentThisMonth / limits.monthlyCap) * 100) : 0,
-    waiting: mine.filter((p) => p.status === "pending_approval").length,
-    blocked: mine.filter((p) => p.verdict === "blocked" && p.createdAt >= monthStart).length,
-    last: mine[0]?.createdAt ?? null,
-  };
-}
-
-// Amber at 80% of the monthly cap, red when used up; always with text, never colour alone.
-const budgetBadge = (b) => b && b.text ? h("span", { class: `budget ${b.level}`, role: "status" }, b.text) : null;
-
-function agentCard(a) {
-  const open = () => switchTo(a.m.id);
-  const card = h("article", { class: "agent", onclick: open },
-    h("div", {},
-      h("button", { class: "open", type: "button", onclick: (e) => { e.stopPropagation(); open(); } }, a.m.name),
-      h("div", { class: "meta" }, a.m.currency, " · ", h("span", { class: `state ${a.state}` }, a.state),
-        " · ", a.last ? `last activity ${new Date(a.last).toLocaleString()}` : "no activity yet")),
-    h("div", {},
-      h("div", { role: "progressbar", "aria-valuemin": 0, "aria-valuemax": a.cap, "aria-valuenow": a.spent, "aria-label": `${a.m.name}: monthly budget used` },
-        h("div", { style: `width:${Math.min(100, a.pct)}%` })),
-      h("div", { class: "bar-label" },
-        h("span", {}, `${money(a.spent, a.m.currency)} of ${money(a.cap, a.m.currency)} this month · ${a.pct}%`),
-        h("span", {}, `${money(a.remaining, a.m.currency)} left`)),
-      budgetBadge(a.budget)),
-    h("div", { class: "side" },
-      a.waiting
-        ? h("button", { class: "waiting", type: "button", onclick: (e) => { e.stopPropagation(); scrollToWaiting = true; open(); } },
-            `${a.waiting} waiting for you`)
-        : h("span", { class: "calm" }, "Nothing waiting"),
-      h("span", { class: "calm" }, `${a.blocked} blocked this month`)));
-  return card;
-}
-
-async function renderAgents() {
-  const [payments, limits] = await Promise.all([
-    api("/api/payments"), Promise.all(mandates.map((m) => api(`/api/mandates/${encodeURIComponent(m.id)}/limits`)))]);
-  const now = new Date();
-  const rows = mandates.map((m, i) => agentSummary(m, limits[i], payments, now));
-  // Never add amounts across currencies: one total per currency.
-  const spentBy = new Map();
-  for (const r of rows) spentBy.set(r.m.currency, (spentBy.get(r.m.currency) || 0) + r.spent);
-  const waiting = rows.reduce((n, r) => n + r.waiting, 0);
-  $("agents-totals").replaceChildren(
-    h("b", {}, `${rows.length} agents`), " · spent this month: ",
-    ...[...spentBy].flatMap(([cur, v], i) => [i ? " · " : "", h("b", {}, money(v, cur))]),
-    " · ", h("b", {}, `${waiting} waiting for you`));
-  $("agent-list").replaceChildren(...rows.map(agentCard));
-  document.title = waiting ? `(${waiting}) Spend Firewall` : "Spend Firewall";
-}
-
-function setAllView(on) {
-  $("main").classList.toggle("allagents", on);
-  $("agents").hidden = !on;
-  if (on) $("main").classList.remove("haspending");
-}
-
-const CREATE_HINT = $("create-hint").textContent;
-function setNoMandate(on) {
-  $("main").classList.toggle("nomandate", on);
-  if (on) {
-    $("create-hint").textContent = "Welcome. Create your first mandate: the budget and rules for one agent. The agent can spend only inside it and can never change it. One mandate uses one currency.";
-    $("create").hidden = false;
-    if (!$("rows").children.length) addRow();
-  }
+function setView(v) {
+  const main = $("main");
+  main.classList.toggle("signedout", v === "signedout");
+  main.classList.toggle("nomandate", v === "empty");
+  main.classList.toggle("allagents", v === "all");
+  $("loading").hidden = v !== "loading";
+  if (v === "signedout" || v === "loading") main.classList.add("signedout");
 }
 
 // ---- create a mandate ----
+const CREATE_HINT = $("create-hint").textContent;
+function setNoMandate() {
+  $("create-hint").textContent = "Welcome. Create your first mandate: the budget and rules for one agent. The agent can spend only inside it and can never change it. One mandate uses one currency.";
+  $("create").hidden = false;
+  if (!$("rows").children.length) addRow();
+}
 function addRow(r = {}) {
   const row = h("div", { class: "row" },
     h("label", {}, "Address", h("input", { name: "address", value: r.address || "", placeholder: "Wallet, IBAN or account number" })),
@@ -645,7 +1017,7 @@ function addRow(r = {}) {
 }
 $("add-row").addEventListener("click", () => addRow());
 
-// ---- draft the rules from plain English (nothing is saved until Create) ----
+// Draft the rules from plain English (nothing is saved until Create).
 function fillForm(d) {
   const set = (name, v) => { $("create").querySelector(`.grid [name=${name}]`).value = v ?? ""; };
   for (const k of ["name", "task", "currency", "autoApproveMax", "hardMax", "monthlyCap"]) set(k, d[k]);
@@ -670,8 +1042,8 @@ $("draft-btn").addEventListener("click", async () => {
   } catch (err) { showError(`Could not draft the rules: ${err.message}`); }
   finally { btn.disabled = false; btn.textContent = "Draft rules"; }
 });
-$("new-btn").addEventListener("click", () => { $("create-hint").textContent = CREATE_HINT; $("create").hidden = false; if (!$("rows").children.length) addRow(); $("create").scrollIntoView({ behavior: "smooth" }); });
-$("cancel-create").addEventListener("click", () => { $("create").hidden = true; if (!mandates.length) setNoMandate(true); });
+$("new-btn").addEventListener("click", () => { $("create-hint").textContent = CREATE_HINT; $("create").hidden = false; if (!$("rows").children.length) addRow(); $("create").scrollIntoView({ behavior: "smooth" }); $("create").querySelector("textarea, input").focus({ preventScroll: true }); });
+$("cancel-create").addEventListener("click", () => { $("create").hidden = true; if (!mandates.length) setNoMandate(); });
 
 $("create").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -695,28 +1067,14 @@ $("create").addEventListener("submit", async (e) => {
       expiresAt: date ? new Date(`${date}T23:59:59Z`).toISOString() : null,
     }) });
     showError("");
-    mandateId = m.id; seen = null;
     e.target.reset(); $("rows").replaceChildren(); $("draft-notes").hidden = true; $("create").hidden = true;
-    await refresh();
+    switchTo(m.id);
+    toast(`Created ${m.name}`, "check");
     showConnect(m);
   } catch (err) { showError(`Could not create the mandate: ${err.message}`); }
 });
 
 // ---- connect an agent ----
-const SVG = "http://www.w3.org/2000/svg";
-function icon(kind) {
-  const svg = document.createElementNS(SVG, "svg");
-  for (const [k, v] of Object.entries({ width: 18, height: 18, viewBox: "0 0 20 20", fill: "none", stroke: "currentColor", "stroke-width": 1.7, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" })) svg.setAttribute(k, v);
-  const shapes = kind === "check"
-    ? [["path", { d: "M4.5 10.5l3.6 3.6 7.4-8.2" }]]
-    : [["rect", { x: 7.5, y: 7.5, width: 9, height: 9, rx: 2 }], ["path", { d: "M12.5 7.5V5.5a2 2 0 0 0-2-2h-5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h2" }]];
-  for (const [tag, attrs] of shapes) {
-    const el = document.createElementNS(SVG, tag);
-    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-    svg.append(el);
-  }
-  return svg;
-}
 async function copy(text, btn) {
   let label = "Copied";
   try { await navigator.clipboard.writeText(text); }
@@ -727,7 +1085,7 @@ async function copy(text, btn) {
 function snippet(title, text) {
   const btn = h("button", { class: "ghost icon", type: "button", "aria-label": "Copy to clipboard", title: "Copy to clipboard" }, icon("copy"));
   btn.addEventListener("click", () => copy(text, btn));
-  return h("div", { class: "snip" }, h("div", { class: "copyrow" }, h("b", {}, title), btn), h("pre", {}, text));
+  return h("div", { class: "snip" }, h("div", { class: "copyrow" }, h("b", {}, title), btn), h("pre", { class: "code" }, text));
 }
 function showConnect(m) {
   const url = `${location.origin}/mcp`;
@@ -736,8 +1094,7 @@ function showConnect(m) {
     h("p", { class: "hint" }, `Give your agent this endpoint and token. It will see three tools: request_payment, get_payment_status and get_spending_limits. Nothing that can change the rules for "${m.name}".`),
     snippet("Claude Code (run in a terminal)", `claude mcp add --transport http spend-firewall ${url} --header "Authorization: ${auth}"`),
     snippet("Claude Desktop (claude_desktop_config.json)", JSON.stringify({ mcpServers: { "spend-firewall": { command: "npx", args: ["mcp-remote", url, "--header", `Authorization: ${auth}`] } } }, null, 2)),
-    snippet("Any other MCP client (Streamable HTTP)", `URL:    ${url}\nHeader: Authorization: ${auth}`),
-  );
+    snippet("Any other MCP client (Streamable HTTP)", `URL:    ${url}\nHeader: Authorization: ${auth}`));
   $("connect").hidden = false;
   $("connect").scrollIntoView({ behavior: "smooth" });
 }
@@ -754,9 +1111,11 @@ function revokeButton(m) {
       return;
     }
     clearTimeout(armed); btn.disabled = true;
-    try { await api(`/api/mandates/${encodeURIComponent(m.id)}/revoke`, { method: "POST" }); showError(""); }
+    try {
+      await api(`/api/mandates/${encodeURIComponent(m.id)}/revoke`, { method: "POST" }); showError("");
+      for (const p of lastPending.values()) if (p.mandateId === m.id) decidedHere.add(p.id); toast(`${m.name} revoked: its agent token no longer works`, "block"); }
     catch (err) { showError(`Could not revoke: ${err.message}`); }
-    await refresh();
+    await refresh(true);
   });
   return btn;
 }
@@ -779,7 +1138,6 @@ function renderTry(m) {
   } }, name)));
   $("recips").replaceChildren(...m.allowlist.map((r) => h("option", { value: r.address }, r.label)));
 }
-
 $("tryform").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!mandate) return;
@@ -796,59 +1154,84 @@ $("tryform").addEventListener("submit", async (e) => {
     if (body.error) throw new Error(body.error.message || "Request failed");
     const r = JSON.parse(body.result.content[0].text);
     if (body.result.isError || r.error) throw new Error(r.error || "Request failed");
+    const o = outcome({ status: r.status, verdict: r.verdict });
     out.replaceChildren(h("div", { class: `result ${r.verdict}` },
-      h("span", { class: `badge ${r.verdict}` }, VERDICT[r.verdict] || r.verdict),
-      h("div", { class: "sub" }, `${money(r.amount, r.currency)} · status: ${r.status}${r.reference ? ` · ref ${r.reference}` : ""}`),
+      chip(o),
+      h("div", { class: "sub" }, `${money(r.amount, r.currency)}, ${r.status.replaceAll("_", " ")}${r.reference ? `, ref ${r.reference}` : ""}`),
       r.reasons && r.reasons.length ? h("ul", {}, r.reasons.map((x) => h("li", {}, x))) : null,
       r.next ? h("div", { class: "sub" }, r.next) : null));
   } catch (err) {
     out.replaceChildren(h("div", { class: "result blocked" }, `Could not send: ${err.message}`));
   }
-  refresh();
+  refresh(true);
 });
 
+// ---- polling ----
 let inFlight = false;
-async function refresh() {
-  if (!token) { $("login").classList.add("show"); setLive(false, "not connected"); return; }
-  if (inFlight) return;
+async function refresh(force = false) {
+  if (!token) { setView("signedout"); $("login").classList.add("show"); renderLive(); return; }
+  if (inFlight && !force) return;
   inFlight = true;
+  if (!loaded) setView("loading");
   try {
     mandates = await api("/api/mandates");
     $("login").classList.remove("show");
     if (mandateId && !mandates.some((m) => m.id === mandateId)) { showError("That mandate no longer exists."); mandateId = ""; mandate = null; }
     if (!mandateId && mandates.length === 1) mandateId = mandates[0].id;
     renderSelector();
-    if (!mandates.length) { setAllView(false); setNoMandate(true); setLive(true, "connected · no mandate yet"); return; }
-    setNoMandate(false);
+    if (!mandates.length) { setView("empty"); setNoMandate(); markOk(); return; }
     if (!mandateId) {
-      setAllView(true);
-      await renderAgents();
-      showError("");
-      setLive(true, `live · updated ${new Date().toLocaleTimeString()}`);
-      return;
+      const [payments, limitsList, audit] = await Promise.all([api("/api/payments"),
+        Promise.all(mandates.map((m) => api(`/api/mandates/${encodeURIComponent(m.id)}/limits`))), api("/api/audit/verify")]);
+      setView("all");
+      keepFocus(() => {
+        renderHero(payments, mandates, limitsList);
+        renderPending(payments);
+        renderAgents(mandates.map((m, i) => agentSummary(m, limitsList[i], payments)));
+        renderFeed(payments);
+        renderAudit(audit);
+      });
+    } else {
+      const q = `?mandateId=${encodeURIComponent(mandateId)}`;
+      const [m, payments, audit, limits] = await Promise.all([
+        api(`/api/mandates/${encodeURIComponent(mandateId)}`), api(`/api/payments${q}`), api("/api/audit/verify"),
+        api(`/api/mandates/${encodeURIComponent(mandateId)}/limits`)]);
+      const wasEmpty = !mandate;
+      mandate = m;
+      setView("one");
+      keepFocus(() => {
+        renderHero(payments, [m], [limits]);
+        renderPending(payments);
+        renderMandate(m, limits, payments);
+        renderFeed(payments);
+        renderAudit(audit);
+      });
+      if (wasEmpty) renderTry(m);
     }
-    setAllView(false);
-    const q = `?mandateId=${encodeURIComponent(mandateId)}`;
-    const [m, stats, payments, audit, limits] = await Promise.all([
-      api(`/api/mandates/${encodeURIComponent(mandateId)}`), api(`/api/stats${q}`), api(`/api/payments${q}`), api("/api/audit/verify"),
-      api(`/api/mandates/${encodeURIComponent(mandateId)}/limits`)]);
-    renderAudit(audit);
-    const wasEmpty = !mandate;
-    mandate = m; currency = m.currency; lastPayments = payments;
-    showError("");
-    renderCounters(stats, payments); renderMandate(m, stats, limits); renderPending(payments); renderFeed(payments);
-    if (wasEmpty) renderTry(m);
-    if (scrollToWaiting) { scrollToWaiting = false; $("waiting").scrollIntoView({ behavior: "smooth" }); }
-    setLive(true, `live · updated ${new Date().toLocaleTimeString()}`);
+    if (scrollToWaiting) { scrollToWaiting = false; $("waiting").scrollIntoView({ behavior: "smooth" }); $("waiting-h").focus({ preventScroll: true }); }
+    markOk();
   } catch (e) {
-    if (e.status === 401) { token = ""; saveToken(""); $("login").classList.add("show"); showError("Admin token rejected. Enter it again."); setLive(false, "not connected"); }
+    if (e.status === 401) { token = ""; saveToken(""); setView("signedout"); $("login").classList.add("show"); showError("Admin token rejected. Enter it again."); }
     else if (e.status === 404 && mandateId) { showError("That mandate no longer exists."); mandateId = ""; mandate = null; }
-    else { showError(`Dashboard error: ${e.message}`); setLive(false, "disconnected"); }
+    else {
+      offline = true;
+      if (!loaded) setView("loading");
+      showError(e.status ? `The server answered with an error (${e.message}). Showing the last data; retrying every 2 seconds.`
+        : "Can't reach the Spend Firewall server. Showing the last data; retrying every 2 seconds.");
+    }
+    renderLive();
   } finally { inFlight = false; }
 }
+function markOk() {
+  if (offline) toast("Back online", "check");
+  offline = false; loaded = true; lastOk = Date.now();
+  showError("");
+  renderLive();
+}
 
-$("login").addEventListener("submit", (e) => { e.preventDefault(); token = $("tok").value.trim(); saveToken(token); $("tok").value = ""; refresh(); });
+$("login").addEventListener("submit", (e) => { e.preventDefault(); token = $("tok").value.trim(); saveToken(token); $("tok").value = ""; showError(""); refresh(true); });
 $("signout").addEventListener("click", () => { saveToken(""); location.reload(); });
+renderFilters();
 refresh();
 setInterval(refresh, 2000);
 </script>
