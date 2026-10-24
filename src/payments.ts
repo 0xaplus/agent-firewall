@@ -2,6 +2,7 @@
 import type { Database } from "bun:sqlite";
 import { getMandate, getPayment, insertPayment, listPayments, movePayment, type PaymentPatch } from "./db";
 import { verdictOf } from "./engine/risk";
+import { mandateStopped } from "./engine/rules";
 import { CoreError } from "./errors";
 import type { Check, Mandate, Payment, PaymentRequest, PaymentStatus, Settler } from "./types";
 
@@ -77,11 +78,11 @@ export async function openPayment(deps: PaymentDeps, mandate: Mandate, req: Paym
 
 export async function approvePayment(deps: PaymentDeps, id: string): Promise<Payment> {
   const p = needPending(deps.db, id);
-  // Revoking denies held payments, but a request that passed its checks just before
-  // the revoke can still land afterwards. A revoked mandate never moves money.
-  if (getMandate(deps.db, p.mandateId)?.status !== "active") {
-    return move(deps.db, p, "denied", withCheck(p, denial("Mandate was revoked before this was approved.")));
-  }
+  // A held payment can outlive its mandate: it may expire while the payment waits, and a request
+  // that passed its checks just before a revoke can land after it. Neither may move money.
+  const mandate = getMandate(deps.db, p.mandateId);
+  const stopped = mandate ? mandateStopped(mandate, (deps.now ?? (() => new Date()))()) : "Mandate not found.";
+  if (stopped) return move(deps.db, p, "denied", withCheck(p, denial(`${stopped} It can no longer be approved.`)));
   return settle(deps, move(deps.db, p, "settling"));
 }
 

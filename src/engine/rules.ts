@@ -31,14 +31,17 @@ export const currency: Rule = ({ mandate, req }) =>
   check("currency", !req.currency || req.currency === mandate.currency, "block",
     `Paid in ${mandate.currency}.`, `Request is in ${req.currency} but this mandate pays in ${mandate.currency}.`);
 
+// Why a mandate can no longer move money, or null if it still can. Also used when a human approves.
+export function mandateStopped(mandate: Mandate, now: Date): string | null {
+  if (mandate.status !== "active") return "Mandate is revoked.";
+  if (mandate.expiresAt && !(new Date(mandate.expiresAt).getTime() > now.getTime())) return `Mandate expired on ${mandate.expiresAt}.`;
+  return null;
+}
+
 // R1
 export const mandateActive: Rule = ({ mandate, now }) => {
-  if (mandate.status !== "active") return check("mandate_active", false, "block", "", "Mandate is revoked.");
-  if (mandate.expiresAt) {
-    const exp = new Date(mandate.expiresAt).getTime();
-    if (!(exp > now.getTime())) return check("mandate_active", false, "block", "", `Mandate expired on ${mandate.expiresAt}.`);
-  }
-  return check("mandate_active", true, "block", "Mandate is active.", "");
+  const stopped = mandateStopped(mandate, now);
+  return check("mandate_active", !stopped, "block", "Mandate is active.", stopped ?? "");
 };
 
 // R2: addresses are opaque strings, compared exactly.
