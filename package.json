@@ -20,6 +20,7 @@
     "seed": "bun run src/seed.ts",
     "test": "bun test",
     "demo": "bun run demo/agent.ts",
+    "demo:compromised": "bun run demo/agent.ts --compromised",
     "bench": "bun run bench/run.ts"
   }
 }

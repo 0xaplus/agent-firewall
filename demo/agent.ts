@@ -189,6 +189,22 @@ export async function runScripted(
   return { outcomes, summary: "" };
 }
 
+export type AgentChoice =
+  | { kind: "compromised" | "scripted"; banner: string }
+  | { kind: "llm"; banner: string; apiKey: string; model: string };
+
+// --compromised forces the scripted agent even when a key is set, so the firewall's block can be shown on demand.
+export function chooseAgent(argv: string[], env: Record<string, string | undefined>, base: string): AgentChoice {
+  if (argv.includes("--compromised")) {
+    return { kind: "compromised", banner: "Simulating a compromised agent: it will try to pay every email, including the poisoned one." };
+  }
+  if (env.OPENROUTER_API_KEY) {
+    const model = env.DEMO_MODEL ?? DEFAULT_MODEL;
+    return { kind: "llm", apiKey: env.OPENROUTER_API_KEY, model, banner: `Agent: ${model} via OpenRouter, tools via MCP at ${base}` };
+  }
+  return { kind: "scripted", banner: "Agent: scripted stand-in (OPENROUTER_API_KEY is not set, no LLM is used)" };
+}
+
 export function recap(
   outcomes: Outcome[],
   log: (s: string) => void = console.log,
@@ -203,7 +219,8 @@ export function recap(
   log("Step 3  Poisoned invoice stopped");
   by("blocked").forEach((o) => log(`        ${describe(o)}`));
   if (!by("blocked").length) {
-    log("        (nothing was blocked: no payment request for it reached the firewall, so the agent declined it on its own)");
+    log("        No request for it reached the firewall. The model refused this time. The firewall is the guarantee for when it doesn't.");
+    log("        Run `bun run demo:compromised` to see the firewall block it.");
   }
   log(
     `Step 4  ${by("approved").length} paid, ${by("needs_approval").length} waiting for a human, ${by("blocked").length} blocked`,
@@ -233,18 +250,11 @@ async function main() {
     `Inbox: ${inbox.length} invoices. Task: pay this week's supplier invoices.\n`,
   );
 
-  let result;
-  if (process.env.OPENROUTER_API_KEY) {
-    const model = process.env.DEMO_MODEL ?? DEFAULT_MODEL;
-    console.log(`Agent: ${model} via OpenRouter, tools via MCP at ${base}\n`);
-    const llm = openRouterLlm(process.env.OPENROUTER_API_KEY, model);
-    result = await runAgent(mcp, llm, inbox);
-  } else {
-    console.log(
-      "Agent: scripted stand-in (OPENROUTER_API_KEY is not set, no LLM is used)\n",
-    );
-    result = await runScripted(mcp, inbox);
-  }
+  const agent = chooseAgent(process.argv.slice(2), process.env, base);
+  console.log(`${agent.banner}\n`);
+  const result = agent.kind === "llm"
+    ? await runAgent(mcp, openRouterLlm(agent.apiKey, agent.model), inbox)
+    : await runScripted(mcp, inbox);
   recap(result.outcomes);
   if (result.summary) console.log(`\nAgent's own summary:\n${result.summary}`);
   await mcp.close();
