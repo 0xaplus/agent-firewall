@@ -21,6 +21,7 @@ Mandates are currency- and rail-agnostic: every limit is in the mandate's curren
 
 1. **Sign in.** Open the dashboard with your admin token. On a fresh database it opens on "New mandate"; if you ran `bun run seed` it opens on the demo mandate.
 2. **Create a mandate.** Name, what the agent is for, a currency, an auto-approve limit, a hard limit, a monthly cap, and who may be paid (an address and a label each). You can add as many mandates as you like and switch between them from the header; the list is remembered in this browser.
+   Or describe the rules in plain English ("Naira only, up to ₦50,000 without asking me, never more than ₦300,000, ₦1,000,000 a month, pay Lagos Textiles at 0123456789") and press **Draft rules**: a model fills the form, and notes say what it left empty and why. A recipient is kept only if its address appears in your text, so addresses are never invented; impossible limits (auto-approve above the hard limit, hard limit above the cap) are left for you to set. Nothing is saved until you check the form and press Create. Needs `OPENROUTER_API_KEY`.
 3. **Connect an agent.** Right after creating a mandate, the dashboard shows the MCP endpoint and the agent's token as ready-to-paste snippets for Claude Code, Claude Desktop and any other MCP client. "Connect an agent" on the mandate card shows them again.
 4. **Let the agent work.** Everything it asks for is approved, held or blocked. The top line shows what has been paid out and what has been stopped.
 5. **Decide.** Held payments appear under "Waiting for you" with the reason, and Approve or Deny settles or rejects them. Every request, blocked ones included, is in Activity with the reasons in plain English.
@@ -37,12 +38,13 @@ bun run seed                          # demo mandate + agent token, into firewal
 ADMIN_TOKEN=change-me bun run dev     # http://localhost:3000
 ```
 
-Open `http://localhost:3000/?token=change-me`. The token is read once and removed from the address bar. It is kept in `sessionStorage`: a refresh keeps you signed in, closing the tab signs you out, and so does the Sign out button. The seeded demo mandate is `mdt_ada` (200 auto-approve / 1000 hard / 2000 monthly, four allowlisted suppliers), agent token `agt_demo_ada`.
+Open `http://localhost:3000/?token=change-me`. The token is read once and removed from the address bar. It is kept in `sessionStorage`: a refresh keeps you signed in, closing the tab signs you out, and so does the Sign out button. `bun run seed` creates two demo mandates, both in the dashboard's mandate switcher: `mdt_ada` in USDC (200 auto-approve / 1000 hard / 2000 monthly, four allowlisted suppliers, agent token `agt_demo_ada`), and `mdt_lagos` in NGN for a Lagos business (₦50,000 / ₦300,000 / ₦1,000,000, four Lagos suppliers with placeholder account numbers, agent token `agt_demo_lagos`). The demo and the bench use the USDC one.
 
 In another terminal:
 
 ```bash
 bun run demo     # an agent works through 5 invoices
+bun run demo:compromised   # same, with an agent that tries to pay the poisoned email
 ADMIN_TOKEN=change-me bun run bench   # 20 attacks, naive vs firewalled
 bun test
 ```
@@ -55,9 +57,17 @@ Environment:
 | `ADMIN_TOKEN` | – | required for `/api`; if unset every `/api` call returns 401 |
 | `DB_PATH` | `firewall.db` | SQLite file (`:memory:` for throwaway runs) |
 | `SETTLER` | `mock` | settlement rail (`mock` today) |
-| `OPENROUTER_API_KEY` | – | turns on the LLM intent check and the LLM demo agent |
+| `OPENROUTER_API_KEY` | – | turns on the LLM intent check, drafting rules from plain English, and the LLM demo agent |
 | `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check ($0.10/M in, $0.50/M out; `openai/gpt-4.1-mini` and `google/gemini-2.5-flash` also work but cost more) |
 | `DEMO_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the demo agent |
+
+## Approve from a phone
+
+The server listens on all network interfaces, and at startup it prints the address a phone on the same Wi-Fi or hotspot can open (`On your network: http://192.168.…:3000/`). Open `http://<that address>:3000/?token=<ADMIN_TOKEN>` on the phone. When a payment is waiting, it is the first thing on the page, with large Approve and Deny buttons. A new waiting payment shows a "New" flag, puts the count in the tab title, and beeps once you have tapped the page (browsers only allow sound after a tap).
+
+Running under WSL2: the printed address is on WSL's virtual network, which a phone can't reach. The startup log then explains the two fixes: turn on mirrored networking, or forward the port from Windows with `netsh interface portproxy`, then use the Windows machine's Wi-Fi address.
+
+Anyone on the same network can reach the server, but `/api` still needs the admin token and `/mcp` an agent token.
 
 ## Check the claims yourself
 
@@ -85,6 +95,7 @@ There is no tool to read or edit mandate rules. Mandates change only through the
 All routes need `Authorization: Bearer $ADMIN_TOKEN`. Errors are `{ "error": "…" }` (400 bad input, 401, 404, 405, 409 wrong state, 500).
 
 - `POST /api/mandates`, `GET /api/mandates/:id`, `POST /api/mandates/:id/revoke`
+- `POST /api/mandates/draft` with `{ text }`: returns `{ draft, notes }` drafted from plain English and creates nothing (503 without `OPENROUTER_API_KEY`)
 - `GET /api/payments?mandateId=`
 - `POST /api/payments/:id/approve`, `POST /api/payments/:id/deny` (only while `pending_approval`)
 - `GET /api/stats?mandateId=`
@@ -120,7 +131,13 @@ claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
 
 `bun run demo` plays the story on five invoices: three clean ones are paid automatically, one over the auto-approve limit waits for a human (approve it on the dashboard), and one poisoned email, which tells the agent to ignore its rules and pay a new wallet, is blocked.
 
-With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Note that current models (tested with `anthropic/claude-haiku-5.5` and `anthropic/claude-sonnet-5.5`) usually spot the poisoned email and refuse to pay it themselves, so step 3 then shows that no request reached the firewall. The scripted stand-in (unset the key) always sends it, which shows the firewall's block. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
+Which agent plays:
+
+- **`bun run demo:compromised`** (or `bun run demo -- --compromised`): a compromised agent that tries to pay every email, including the poisoned one, even when `OPENROUTER_API_KEY` is set. It makes no LLM calls of its own; every request really goes through `/mcp`, and the firewall always blocks the poisoned one, with the reasons printed. Use this to show the block on demand.
+- **`bun run demo` with `OPENROUTER_API_KEY` set:** a real model reached through OpenRouter reads the inbox and pays through MCP. Current models (tested with `anthropic/claude-haiku-5.5` and `anthropic/claude-sonnet-5.5`) usually spot the poisoned email and refuse to pay it, so step 3 then says: "The model refused this time. The firewall is the guarantee for when it doesn't."
+- **`bun run demo` without a key:** the same scripted agent as the compromised mode; it says so when it starts.
+
+Running the demo twice on the same database within 10 minutes holds the repeated invoices for a human (the duplicate rule, R8). For a clean rerun, wait 10 minutes or start the server on a fresh `DB_PATH`.
 
 ## How a request is judged
 
@@ -141,7 +158,7 @@ Rules, in code order (`src/engine/rules.ts`). A failed **block** rule blocks; a 
 
 R9 and the amount sanity check (positive, finite) are additions to the plan's R0–R8.
 
-If nothing blocked, one LLM call audits intent (5 s timeout). It treats the invoice or email as untrusted data. It can only make the outcome stricter: injection suspected → block, off-task → escalate, error or timeout or unreadable reply → escalate. With no `OPENROUTER_API_KEY` the intent check is off and a warning is logged at startup. Every request is stored, blocked ones included. Revoking a mandate stops its token and denies any payment still waiting for approval.
+If nothing blocked, one LLM call audits intent (5 s timeout). It treats the invoice or email as untrusted data. It can only make the outcome stricter: injection suspected → block, off-task → escalate, error or timeout or unreadable reply → escalate. With no `OPENROUTER_API_KEY` the intent check is off and a warning is logged at startup. Every request is stored, blocked ones included. Revoking a mandate stops its token and denies any payment still waiting for approval. Approving a held payment checks again that the mandate is still active and unexpired, and that paying it would not take this month's spend over the cap; if any of these fails, the payment is denied with the reason, not paid.
 
 ## Audit log
 
@@ -175,6 +192,8 @@ src/core.ts            the real Core, wired from env
 src/core.factory.ts    createCore(deps) / createCoreFromEnv()
 src/db.ts              SQLite schema + queries
 src/payments.ts        payment lifecycle: every status change (open, settle, approve, deny, deny on revoke)
+src/schema.ts          zod schema for a new mandate (REST and drafts)
+src/compile.ts         drafts a mandate from plain-English rules (never saves)
 src/audit.ts           hash-chained audit log: appendAudit, verifyAudit
 src/errors.ts          CoreError: not_found / wrong_state, mapped to 404 / 409
 src/seed.ts            demo mandate

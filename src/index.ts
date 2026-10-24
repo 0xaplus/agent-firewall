@@ -1,11 +1,13 @@
 import { core } from "./core";
 import { handleApi } from "./api";
 import { handleMcp } from "./mcp/server";
+import { startupMessage } from "./net";
 
 const port = Number(process.env.PORT ?? 3000);
 
 const server = Bun.serve({
   port,
+  hostname: "0.0.0.0", // reachable from a phone on the same network
   async fetch(req) {
     const { pathname } = new URL(req.url);
 
@@ -17,4 +19,4 @@ const server = Bun.serve({
   },
 });
 
-console.log(`Spend Firewall listening on ${server.url}`);
+console.log(startupMessage(server.port ?? port));

@@ -95,6 +95,10 @@
   .grid .wide { grid-column: 1 / -1; }
   .row { display: grid; grid-template-columns: 2.2fr 1.3fr 1fr auto; gap: 12px; margin-bottom: 12px; align-items: end; }
   .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+  .draft { display: grid; gap: 12px; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+  .draft-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .notes { margin: 0; padding: 12px 16px 12px 34px; border: 1px solid var(--warn-line); background: var(--warn-wash); border-radius: 10px; color: var(--warn); font-weight: 500; }
+  .notes.ok { list-style: none; padding-left: 16px; border-color: var(--ok); background: var(--ok-wash); color: var(--ok); }
 
   /* ---- messages ---- */
   #banner { display: none; background: var(--bad-wash); border: 1px solid var(--bad-line); color: var(--bad); border-radius: 10px; padding: 12px 16px; font-weight: 500; }
@@ -123,6 +127,9 @@
   .pend .meta { color: var(--ink-2); margin-top: 2px; }
   .pend .why { margin-top: 8px; font-size: 14px; color: var(--warn); font-weight: 500; max-width: 70ch; }
   .btns { display: flex; gap: 10px; }
+  .newflag { margin-left: 10px; vertical-align: 2px; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 650; background: var(--warn); color: #fff; }
+  .pend.fresh { animation: ring 1.2s var(--ease) 2; }
+  @keyframes ring { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 40% { box-shadow: 0 0 0 6px var(--warn-line); } }
   .btns button { min-width: 108px; min-height: 44px; }
 
   /* ---- layout: activity + mandate ---- */
@@ -210,7 +217,10 @@
     .row { grid-template-columns: 1fr 1fr; }
     .row > label:first-child { grid-column: 1 / -1; }
     .pend { grid-template-columns: 1fr; padding: 16px; }
-    .btns button { flex: 1; }
+    .btns button { flex: 1; min-height: 52px; font-size: 16px; }
+    /* On a phone, a payment waiting for a decision comes first. */
+    main.haspending #banner { order: -2; }
+    main.haspending #waiting { order: -1; }
     thead { display: none; }
     tbody tr { display: grid; grid-template-columns: 1fr auto auto; column-gap: 12px; padding: 14px 16px; border-top: 1px solid var(--line); }
     tbody tr:first-child { border-top: 0; }
@@ -224,7 +234,7 @@
     td:nth-child(6) { grid-column: 3; grid-row: 3; margin-top: 10px; font-size: 14px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    tr.new td { animation: none; }
+    tr.new td, .pend.fresh { animation: none; }
     * { transition-duration: .01ms !important; }
   }
 </style>
@@ -254,6 +264,14 @@
   <form id="create" class="panel" hidden>
     <h2>New mandate</h2>
     <p class="hint" id="create-hint">A mandate is the budget and the rules for one agent. The agent can spend only inside it and can never change it. One mandate uses one currency.</p>
+    <div class="draft">
+      <label>Describe the rules in plain English<textarea id="rules-text" placeholder="My agent pays my weekly supplier invoices. Up to 50,000 a payment without asking me, never more than 300,000 in one payment, 1,000,000 a month. Pay Lagos Textiles at 0123456789."></textarea></label>
+      <div class="draft-row">
+        <button type="button" class="ghost" id="draft-btn">Draft rules</button>
+        <span class="sub">The draft fills the form below. Nothing is saved until you check it and press Create mandate.</span>
+      </div>
+      <ul class="notes" id="draft-notes" aria-live="polite" hidden></ul>
+    </div>
     <div class="grid">
       <label>Name<input name="name" required placeholder="Ops agent"></label>
       <label>Currency<input name="currency" required placeholder="Currency code"></label>
@@ -287,7 +305,7 @@
   </section>
 
   <section id="waiting" aria-label="Pending approvals">
-    <h2>Waiting for you</h2>
+    <h2>Waiting for you<span class="newflag" id="newflag" role="status" hidden>New</span></h2>
     <div class="pending" id="pending"><div class="empty">Nothing waiting.</div></div>
   </section>
 
@@ -409,8 +427,34 @@ async function decide(id, action, btns) {
   finally { busy.delete(id); await refresh(); }
 }
 
+// A short beep when a payment starts waiting. Browsers allow sound only after the first tap on the page.
+let audio = null;
+const unlockAudio = () => { try { audio = audio || new AudioContext(); audio.resume(); } catch { /* no sound: the banner still shows */ } };
+document.addEventListener("pointerdown", unlockAudio, { once: true });
+function beep() {
+  if (!audio || audio.state !== "running") return;
+  const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+  o.frequency.value = 880;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.2, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+  o.connect(g).connect(audio.destination);
+  o.start(t); o.stop(t + 0.4);
+}
+let flagTimer = null;
+function announceNew() {
+  $("newflag").hidden = false;
+  clearTimeout(flagTimer);
+  flagTimer = setTimeout(() => { $("newflag").hidden = true; }, 8000);
+  beep();
+}
+
 function renderPending(payments) {
   const pend = payments.filter((p) => p.status === "pending_approval");
+  const arrived = new Set(seen ? pend.filter((p) => !seen.has(p.id)).map((p) => p.id) : []);
+  if (arrived.size) announceNew();
+  $("main").classList.toggle("haspending", pend.length > 0);
+  document.title = pend.length ? `(${pend.length}) Spend Firewall` : "Spend Firewall";
   if (!pend.length) { $("pending").replaceChildren(h("div", { class: "empty" }, "Nothing waiting.")); return; }
   $("pending").replaceChildren(...pend.map((p) => {
     const w = who(p.recipient);
@@ -419,7 +463,7 @@ function renderPending(payments) {
     const btns = [approve, deny];
     approve.addEventListener("click", () => decide(p.id, "approve", btns));
     deny.addEventListener("click", () => decide(p.id, "deny", btns));
-    return h("div", { class: "pend" },
+    return h("div", { class: arrived.has(p.id) ? "pend fresh" : "pend" },
       h("div", {},
         h("div", { class: "amt" }, money(p.amount, p.currency)),
         h("div", { class: "meta" }, `${w.label} · ${p.purpose}`),
@@ -488,11 +532,17 @@ function switchTo(id) {
 }
 
 // ---- first run / choosing a mandate ----
+// The demo mandates from `bun run seed`. The API has no "list mandates" call, so look them up by id.
+const SEEDED = ["mdt_ada", "mdt_lagos"];
 async function bootstrap() {
   if (mandateId) return;
-  const list = known();
-  if (list.length) { mandateId = list[0].id; return; }
-  try { const m = await api("/api/mandates/mdt_ada"); remember(m); mandateId = m.id; } catch (e) { if (e.status === 401) throw e; }
+  const current = known()[0]?.id;
+  // Newly found ones go to the front of the list, so look up in reverse: the first seeded mandate ends up first.
+  for (const id of [...SEEDED].reverse()) {
+    if (known().some((k) => k.id === id)) continue;
+    try { remember(await api(`/api/mandates/${id}`)); } catch (e) { if (e.status === 401) throw e; }
+  }
+  mandateId = current || known()[0]?.id || "";
 }
 
 const CREATE_HINT = $("create-hint").textContent;
@@ -515,6 +565,32 @@ function addRow(r = {}) {
   $("rows").append(row);
 }
 $("add-row").addEventListener("click", () => addRow());
+
+// ---- draft the rules from plain English (nothing is saved until Create) ----
+function fillForm(d) {
+  const set = (name, v) => { $("create").querySelector(`.grid [name=${name}]`).value = v ?? ""; };
+  for (const k of ["name", "task", "currency", "autoApproveMax", "hardMax", "monthlyCap"]) set(k, d[k]);
+  set("expiresAt", d.expiresAt ? d.expiresAt.slice(0, 10) : "");
+  $("rows").replaceChildren();
+  (d.allowlist && d.allowlist.length ? d.allowlist : [{}]).forEach((r) => addRow(r));
+}
+function showNotes(notes) {
+  const ul = $("draft-notes");
+  ul.classList.toggle("ok", !notes.length);
+  ul.replaceChildren(...(notes.length ? notes : ["Draft ready. Check every field, then press Create mandate."]).map((n) => h("li", {}, n)));
+  ul.hidden = false;
+}
+$("draft-btn").addEventListener("click", async () => {
+  const text = $("rules-text").value.trim();
+  if (!text) return showError("Describe the rules first.");
+  const btn = $("draft-btn");
+  btn.disabled = true; btn.textContent = "Drafting…";
+  try {
+    const { draft, notes } = await api("/api/mandates/draft", { method: "POST", body: JSON.stringify({ text }) });
+    fillForm(draft); showNotes(notes); showError("");
+  } catch (err) { showError(`Could not draft the rules: ${err.message}`); }
+  finally { btn.disabled = false; btn.textContent = "Draft rules"; }
+});
 $("new-btn").addEventListener("click", () => { $("create-hint").textContent = CREATE_HINT; $("create").hidden = false; if (!$("rows").children.length) addRow(); $("create").scrollIntoView({ behavior: "smooth" }); });
 $("cancel-create").addEventListener("click", () => { $("create").hidden = true; if (!mandateId) setNoMandate(true); });
 
@@ -541,7 +617,7 @@ $("create").addEventListener("submit", async (e) => {
     }) });
     showError("");
     remember(m); mandateId = m.id; seen = null;
-    e.target.reset(); $("rows").replaceChildren(); $("create").hidden = true;
+    e.target.reset(); $("rows").replaceChildren(); $("draft-notes").hidden = true; $("create").hidden = true;
     await refresh();
     showConnect(m);
   } catch (err) { showError(`Could not create the mandate: ${err.message}`); }

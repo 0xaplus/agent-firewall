@@ -140,6 +140,24 @@ describe("deciding a held payment after the mandate expired", () => {
   });
 });
 
+describe("deciding a held payment against the monthly cap", () => {
+  test("approval is denied when settled and in-flight spend plus this payment would pass the cap", async () => {
+    stored("settled", { amount: 1200 });
+    stored("settling", { amount: 500 });
+    const p = stored("pending_approval", { amount: 400 });
+    const done = await approvePayment(deps, p.id);
+    expect(done.status).toBe("denied");
+    expect(done.checks.at(-1)).toEqual({ name: "monthly_cap", pass: false, severity: "block",
+      reason: "Approving this would exceed the monthly cap (300 USDC left of 2000 USDC). It was not paid." });
+    expect(sent).toEqual([]);
+  });
+
+  test("approval up to exactly the cap is paid", async () => {
+    stored("settled", { amount: 1600 });
+    expect((await approvePayment(deps, stored("pending_approval", { amount: 400 }).id)).status).toBe("settled");
+  });
+});
+
 describe("denyPending", () => {
   test("denies every held payment of one mandate, with the reason, and touches nothing else", () => {
     const other = { ...DEMO_MANDATE, id: "mdt_other", agentToken: "agt_other" };

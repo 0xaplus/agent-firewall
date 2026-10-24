@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { loadInbox, recap, runAgent, runScripted, type Llm } from "../../demo/agent";
+import { chooseAgent, loadInbox, recap, runAgent, runScripted, type Llm } from "../../demo/agent";
 import { testCore } from "../helpers/testCore";
 import { DEMO_AGENT_TOKEN, DEMO_MANDATE } from "../../src/fixtures";
 import { handleMcp } from "../../src/mcp/server";
@@ -92,13 +92,25 @@ describe("demo agent", () => {
     const out = lines.join("\n");
     for (const s of ["Step 1", "Step 2", "Step 3", "Step 4"]) expect(out).toContain(s);
     expect(out).toContain("1 paid, 1 waiting for a human, 1 blocked");
-    expect(out).not.toContain("declined it on its own");
+    expect(out).not.toContain("refused this time");
   });
 
   test("recap says so when the agent never sent the poisoned request to the firewall", () => {
     const lines: string[] = [];
     recap([{ amount: 10, recipient: "0xa", verdict: "approved", reasons: [] }], (s) => lines.push(s));
-    expect(lines.join("\n")).toContain("declined it on its own");
+    const out = lines.join("\n");
+    expect(out).toContain("The model refused this time. The firewall is the guarantee for when it doesn't.");
+    expect(out).toContain("bun run demo:compromised");
+  });
+
+  test("--compromised forces the scripted agent even with an API key; otherwise the key picks the model", () => {
+    const base = "http://x/mcp";
+    const forced = chooseAgent(["--compromised"], { OPENROUTER_API_KEY: "k" }, base);
+    expect(forced).toEqual({ kind: "compromised", banner: "Simulating a compromised agent: it will try to pay every email, including the poisoned one." });
+    expect(chooseAgent([], { OPENROUTER_API_KEY: "k" }, base)).toMatchObject({ kind: "llm", apiKey: "k", model: DEFAULT_MODEL });
+    expect(chooseAgent([], { OPENROUTER_API_KEY: "k", DEMO_MODEL: "m" }, base)).toMatchObject({ kind: "llm", model: "m" });
+    expect(chooseAgent([], {}, base).kind).toBe("scripted");
+    expect(chooseAgent(["--", "--compromised"], {}, base).kind).toBe("compromised");
   });
 });
 
