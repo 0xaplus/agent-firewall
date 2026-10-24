@@ -20,13 +20,14 @@ Mandates are currency- and rail-agnostic: every limit is in the mandate's curren
 ## The owner's journey
 
 1. **Sign in.** Open the dashboard with your admin token. On a fresh database it opens on "New mandate"; if you ran `bun run seed` it opens on the demo mandate.
-2. **Create a mandate.** Name, what the agent is for, a currency, an auto-approve limit, a hard limit, a monthly cap, and who may be paid (an address and a label each). You can add as many mandates as you like and switch between them from the header; the list is remembered in this browser.
+2. **Create a mandate.** Name, what the agent is for, a currency, an auto-approve limit, a hard limit, a monthly cap, and who may be paid (an address and a label each). Each mandate is one agent with its own budget and rules; you can add as many as you like and switch between them from the header.
    Or describe the rules in plain English ("Naira only, up to ₦50,000 without asking me, never more than ₦300,000, ₦1,000,000 a month, pay Lagos Textiles at 0123456789") and press **Draft rules**: a model fills the form, and notes say what it left empty and why. A recipient is kept only if its address appears in your text, so addresses are never invented; impossible limits (auto-approve above the hard limit, hard limit above the cap) are left for you to set. Nothing is saved until you check the form and press Create. Needs `OPENROUTER_API_KEY`.
 3. **Connect an agent.** Right after creating a mandate, the dashboard shows the MCP endpoint and the agent's token as ready-to-paste snippets for Claude Code, Claude Desktop and any other MCP client. "Connect an agent" on the mandate card shows them again.
-4. **Let the agent work.** Everything it asks for is approved, held or blocked. The top line shows what has been paid out and what has been stopped.
-5. **Decide.** Held payments appear under "Waiting for you" with the reason, and Approve or Deny settles or rejects them. Every request, blocked ones included, is in Activity with the reasons in plain English.
-6. **Test without an agent.** "Test the firewall" sends a real request as the agent, with presets for a clean invoice, over the limit, an unknown recipient and a prompt injection.
-7. **Revoke.** Two clicks on "Revoke mandate" stop the agent's token at once and deny anything still waiting.
+4. **See all your agents.** With two or more mandates the dashboard opens on **All agents**: one card per agent with its status (active, revoked or expired), this month's spend against its cap (bar plus percentage), what is left, how many payments are waiting for you (tap to jump to them), how many were blocked this month, and the last activity. Totals are shown per currency, never added across currencies. Click a card for that agent's full view.
+5. **Let the agent work.** Everything it asks for is approved, held or blocked. The top line shows what has been paid out and what has been stopped.
+6. **Decide.** Held payments appear under "Waiting for you" with the reason, and Approve or Deny settles or rejects them. Every request, blocked ones included, is in Activity with the reasons in plain English.
+7. **Test without an agent.** "Test the firewall" sends a real request as the agent, with presets for a clean invoice, over the limit, an unknown recipient and a prompt injection.
+8. **Revoke.** Two clicks on "Revoke mandate" stop the agent's token at once and deny anything still waiting.
 
 The dashboard cannot edit a mandate's rules once created (the core has no update call); create a new mandate to change them.
 
@@ -94,7 +95,7 @@ There is no tool to read or edit mandate rules. Mandates change only through the
 
 All routes need `Authorization: Bearer $ADMIN_TOKEN`. Errors are `{ "error": "…" }` (400 bad input, 401, 404, 405, 409 wrong state, 500).
 
-- `POST /api/mandates`, `GET /api/mandates/:id`, `POST /api/mandates/:id/revoke`
+- `GET /api/mandates` (every mandate, newest first, agent tokens left out), `POST /api/mandates`, `GET /api/mandates/:id`, `GET /api/mandates/:id/limits`, `POST /api/mandates/:id/revoke`
 - `POST /api/mandates/draft` with `{ text }`: returns `{ draft, notes }` drafted from plain English and creates nothing (503 without `OPENROUTER_API_KEY`)
 - `GET /api/payments?mandateId=`
 - `POST /api/payments/:id/approve`, `POST /api/payments/:id/deny` (only while `pending_approval`)
