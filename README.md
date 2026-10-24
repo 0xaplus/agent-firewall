@@ -1,4 +1,4 @@
-# Spend Firewall
+# Agent Firewall
 
 A firewall between an AI agent and its money. The agent asks to pay; the firewall checks the request against a human-written mandate, then approves, escalates to a human, or blocks it. The agent can never change its own rules.
 
@@ -155,7 +155,7 @@ Start the server, then give the agent the MCP URL and the demo agent token `agt_
 **Claude Code**
 
 ```bash
-claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
+claude mcp add --transport http agent-firewall http://localhost:3000/mcp \
   --header "Authorization: Bearer agt_demo_ada"
 ```
 
@@ -164,7 +164,7 @@ claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
 ```json
 {
   "mcpServers": {
-    "spend-firewall": {
+    "agent-firewall": {
       "command": "npx",
       "args": ["mcp-remote", "http://localhost:3000/mcp", "--header", "Authorization: Bearer agt_demo_ada"]
     }

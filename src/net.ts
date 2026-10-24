@@ -22,7 +22,7 @@ export function wslHint(port: number, env: Record<string, string | undefined> = 
 }
 
 export function startupMessage(port: number, ifaces?: Interfaces, env?: Record<string, string | undefined>): string {
-  const lines = [`Spend Firewall listening on http://localhost:${port}/`];
+  const lines = [`Agent Firewall listening on http://localhost:${port}/`];
   const lan = lanUrls(port, ifaces);
   if (lan.length) lines.push(`On your network (open on a phone on the same Wi-Fi): ${lan.join("  ")}`);
   const hint = wslHint(port, env);

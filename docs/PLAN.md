@@ -1,4 +1,4 @@
-# Spend Firewall: Build Plan
+# Agent Firewall: Build Plan
 
 One Bun process: MCP server + policy engine + REST API + dashboard + SQLite. Settlement via Payfrom, with a mock fallback so work never blocks on keys. Keep it simple: no frameworks, no queues, no microservices.
 
@@ -46,7 +46,7 @@ Human → dashboard (Telegram = stretch) → approve / deny → settle
 ## Repo layout
 
 ```
-spend-firewall/
+agent-firewall/
   AGENTS.md              [shared] rules for coding agents
   package.json           [shared] deps + scripts, set in Step 0
   .env.example           [shared]

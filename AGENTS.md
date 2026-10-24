@@ -1,4 +1,4 @@
-# AGENTS.md — Spend Firewall
+# AGENTS.md — Agent Firewall
 
 Bun + TypeScript. One process. Keep it simple.
 
