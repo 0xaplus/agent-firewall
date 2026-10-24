@@ -255,6 +255,9 @@
   .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
   .tag { background: var(--void-bg); border-radius: 3px; padding: 3px 10px; font-size: var(--t-sm); color: var(--ink-2); }
   .mandate-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--rule); }
+  .revoke-confirm { flex-basis: 100%; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--stop-rule); border-radius: 6px; }
+  .revoke-confirm p { margin: 0; color: var(--stop); font-weight: 600; }
+  .revoke-confirm .row { display: flex; gap: 10px; flex-wrap: wrap; }
   .chart { width: 100%; height: auto; display: block; margin-top: 6px; }
   .chart .bar { fill: var(--slate); }
   :root[data-theme="dark"] .chart .bar { fill: var(--act); }
@@ -675,8 +678,8 @@ function renderLive() {
   el.classList.toggle("idle", !signedIn());
   if (!signedIn()) { el.textContent = "Signed out"; el.classList.remove("down"); return; }
   if (offline || !lastOk) { el.textContent = loaded ? "Offline" : "Connecting…"; el.classList.add("down"); return; }
-  const sec = Math.round((Date.now() - lastOk) / 1000);
-  el.textContent = `Live, updated ${sec < 1 ? "just now" : `${sec} s ago`}`;
+  el.textContent = "Live";
+  el.title = `Updated ${new Date(lastOk).toLocaleTimeString()}`;
   el.classList.remove("down");
 }
 setInterval(renderLive, 1000);
@@ -953,8 +956,8 @@ function renderMandate(m, limits, payments) {
     spendChart(m, payments),
     h("div", { class: "tags", "aria-label": "May be paid" }, m.allowlist.map((r) => h("span", { class: "tag", title: r.address }, r.label))),
     h("div", { class: "mandate-actions" },
-      h("button", { class: "ghost", type: "button", onclick: () => showConnect(m) }, "Connect an agent"),
-      m.status === "active" ? revokeButton(m) : null)).childNodes);
+      h("button", { class: "ghost", type: "button", "data-key": `connect:${m.id}`, onclick: () => showConnect(m) }, "Connect an agent"),
+      m.status === "active" ? revokeControls(m) : null)).childNodes);
 }
 
 function renderAudit(a) {
@@ -1132,24 +1135,36 @@ function showConnect(m) {
 }
 $("close-connect").addEventListener("click", () => ($("connect").hidden = true));
 
-// ---- revoke (two clicks, no browser dialog) ----
-function revokeButton(m) {
-  const btn = h("button", { class: "danger", type: "button" }, "Revoke mandate");
-  let armed = null;
-  btn.addEventListener("click", async () => {
-    if (!armed) {
-      btn.textContent = "Click again to revoke"; btn.classList.add("confirm");
-      armed = setTimeout(() => { armed = null; btn.textContent = "Revoke mandate"; btn.classList.remove("confirm"); }, 4000);
-      return;
-    }
-    clearTimeout(armed); btn.disabled = true;
-    try {
-      await api(`/api/mandates/${encodeURIComponent(m.id)}/revoke`, { method: "POST" }); showError("");
-      for (const p of lastPending.values()) if (p.mandateId === m.id) decidedHere.add(p.id); toast(`${m.name} revoked: its agent token no longer works`, "block"); }
-    catch (err) { showError(`Could not revoke: ${err.message}`); }
-    await refresh(true);
-  });
-  return btn;
+// ---- revoke: ask once, in place ----
+// The mandate panel is redrawn every poll, so which mandate is being confirmed (and whether the request
+// is in flight) lives here, not on the button; otherwise the confirm would vanish under the user.
+let lastLimits = null;     // the open mandate's limits from the last poll
+let revokeAsk = null;      // mandate id showing the confirm row
+let revoking = null;       // mandate id whose revoke request is in flight
+function rerenderMandate() { if (mandate && lastLimits) keepFocus(() => renderMandate(mandate, lastLimits, lastFeed)); }
+function revokeControls(m) {
+  if (revokeAsk !== m.id) {
+    return h("button", { class: "danger", type: "button", "data-key": `revoke:${m.id}`, onclick: () => {
+      revokeAsk = m.id; rerenderMandate(); document.querySelector(`[data-key="revoke-cancel:${m.id}"]`)?.focus();
+    } }, "Revoke mandate");
+  }
+  const busy = revoking === m.id;
+  return h("div", { class: "revoke-confirm", role: "group", "aria-label": "Confirm revoke" },
+    h("p", {}, `Revoke ${m.name}? Its agent token stops working at once, and payments waiting for you are denied. This can't be undone.`),
+    h("div", { class: "row" },
+      h("button", { class: "danger confirm", type: "button", "data-key": `revoke-yes:${m.id}`, disabled: busy || null, onclick: async () => {
+        revoking = m.id; rerenderMandate();
+        try {
+          await api(`/api/mandates/${encodeURIComponent(m.id)}/revoke`, { method: "POST" }); showError("");
+          for (const p of lastPending.values()) if (p.mandateId === m.id) decidedHere.add(p.id);
+          toast(`${m.name} revoked: its agent token no longer works`, "block");
+        } catch (err) { showError(`Could not revoke: ${err.message}`); }
+        revoking = null; revokeAsk = null;
+        await refresh(true);
+      } }, busy ? "Revoking…" : "Yes, revoke"),
+      h("button", { class: "ghost", type: "button", "data-key": `revoke-cancel:${m.id}`, disabled: busy || null, onclick: () => {
+        revokeAsk = null; rerenderMandate(); document.querySelector(`[data-key="revoke:${m.id}"]`)?.focus();
+      } }, "Cancel")));
 }
 
 // ---- try it as the agent ----
@@ -1230,6 +1245,7 @@ async function refresh(force = false) {
         api(`/api/mandates/${encodeURIComponent(mandateId)}/limits`)]);
       const wasEmpty = !mandate;
       mandate = m;
+      lastLimits = limits;
       setView("one");
       keepFocus(() => {
         renderHero(payments, [m], [limits]);
