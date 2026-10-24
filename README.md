@@ -107,9 +107,9 @@ No API key, no network, no running server. Each test name is one promise this RE
 
 The repo has a `Dockerfile` and a `render.yaml` blueprint. In Render: **New + → Blueprint**, pick this repository and branch, and apply. Render builds the image, generates a random `ADMIN_TOKEN` (copy it from the service's **Environment** tab), and asks for the optional `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Then open `https://<your-service>.onrender.com/?token=<ADMIN_TOKEN>`, and point agents at `https://<your-service>.onrender.com/mcp`.
 
-On Render's free plan the service sleeps after 15 minutes without traffic (the next request takes about a minute to wake it, and Telegram is paused while it sleeps), and the disk is not kept: the database starts empty on every restart. The container seeds the demo agents each time it starts, so the demo always works from a clean state. Open the URL a few minutes before demoing. Use a different Telegram bot from the one on your laptop: two servers polling the same bot fight over its messages.
+On Render's free plan the service sleeps after 15 minutes without traffic (the next request takes about a minute to wake it, and Telegram is paused while it sleeps), and the disk is not kept: the database starts empty on every restart. The deploy adds no demo agents: it opens on **New mandate**, so create your mandate after each restart and give the agent its new token. Open the URL a few minutes before demoing. Use a different Telegram bot from the one on your laptop: two servers polling the same bot fight over its messages.
 
-The seeded agent tokens (`agt_demo_ada` and so on) are in this repository, so anyone can send requests as those demo agents to a public deployment. Settlement is a mock, so no real money can move; create your own mandates for anything else.
+The example agents from `bun run seed` (`agt_demo_ada` and so on) have tokens published in this repository, so never seed a public deployment, least of all one with `SETTLER=payfrom`.
 
 ## What the agent can do
 
