@@ -1,6 +1,6 @@
 // Drafts a mandate from the owner's plain-English rules. The draft is only a suggestion:
 // nothing is saved until the human reviews it and creates the mandate.
-import type { IntentLlm } from "./engine/intent";
+import { DEFAULT_INTENT_MODEL, openRouterIntentLlm, type IntentLlm } from "./engine/intent";
 import { amount, NewMandateBody, nonEmpty } from "./schema";
 import type { NewMandate, Recipient } from "./types";
 
@@ -106,4 +106,13 @@ export async function compileMandate(llm: IntentLlm, text: string, opts: { now?:
   } finally {
     clearTimeout(timer);
   }
+}
+
+export type Drafter = (text: string) => Promise<CompileResult>;
+
+// Drafting needs a model: null without OPENROUTER_API_KEY, and the route then says so.
+export function drafterFromEnv(env: Record<string, string | undefined> = process.env): Drafter | null {
+  if (!env.OPENROUTER_API_KEY) return null;
+  const llm = openRouterIntentLlm(env.OPENROUTER_API_KEY, env.INTENT_MODEL ?? DEFAULT_INTENT_MODEL);
+  return (text) => compileMandate(llm, text);
 }
