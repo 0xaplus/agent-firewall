@@ -1,0 +1,18 @@
+# Render blueprint: New + > Blueprint, pick this repo and branch.
+services:
+  - type: web
+    name: spend-firewall
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: ADMIN_TOKEN
+        generateValue: true          # a long random token; copy it from the Environment tab
+      - key: SETTLER
+        value: mock
+      - key: OPENROUTER_API_KEY      # optional: turns on the AI intent check and drafting rules
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN      # optional: use a different bot from your laptop's
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false

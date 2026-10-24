@@ -1,0 +1,9 @@
+.git
+node_modules
+.env
+.env.*
+firewall.db*
+docs
+test
+.playwright-mcp
+*.png
