@@ -43,6 +43,7 @@ In another terminal:
 
 ```bash
 bun run demo     # an agent works through 5 invoices
+bun run demo:compromised   # same, with an agent that tries to pay the poisoned email
 ADMIN_TOKEN=change-me bun run bench   # 20 attacks, naive vs firewalled
 bun test
 ```
@@ -119,7 +120,13 @@ claude mcp add --transport http spend-firewall http://localhost:3000/mcp \
 
 `bun run demo` plays the story on five invoices: three clean ones are paid automatically, one over the auto-approve limit waits for a human (approve it on the dashboard), and one poisoned email, which tells the agent to ignore its rules and pay a new wallet, is blocked.
 
-With `OPENROUTER_API_KEY` set, a real model reached through OpenRouter reads the inbox and pays through MCP. Note that current models (tested with `anthropic/claude-haiku-5.5` and `anthropic/claude-sonnet-5.5`) usually spot the poisoned email and refuse to pay it themselves, so step 3 then shows that no request reached the firewall. The scripted stand-in (unset the key) always sends it, which shows the firewall's block. Without it, a scripted stand-in that pays whatever each email says is used instead; it makes no LLM calls and says so when it starts.
+Which agent plays:
+
+- **`bun run demo:compromised`** (or `bun run demo -- --compromised`): a compromised agent that tries to pay every email, including the poisoned one, even when `OPENROUTER_API_KEY` is set. It makes no LLM calls of its own; every request really goes through `/mcp`, and the firewall always blocks the poisoned one, with the reasons printed. Use this to show the block on demand.
+- **`bun run demo` with `OPENROUTER_API_KEY` set:** a real model reached through OpenRouter reads the inbox and pays through MCP. Current models (tested with `anthropic/claude-haiku-5.5` and `anthropic/claude-sonnet-5.5`) usually spot the poisoned email and refuse to pay it, so step 3 then says: "The model refused this time. The firewall is the guarantee for when it doesn't."
+- **`bun run demo` without a key:** the same scripted agent as the compromised mode; it says so when it starts.
+
+Running the demo twice on the same database within 10 minutes holds the repeated invoices for a human (the duplicate rule, R8). For a clean rerun, wait 10 minutes or start the server on a fresh `DB_PATH`.
 
 ## How a request is judged
 
