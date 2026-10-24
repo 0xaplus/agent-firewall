@@ -64,27 +64,41 @@ Environment:
 | Variable | Default | Meaning |
 |---|---|---|
 | `PORT` | 3000 | server port |
-| `ADMIN_TOKEN` | – | required for `/api`; if unset every `/api` call returns 401 |
+| `ADMIN_TOKEN` | – | the operator's key to `/api`: sees every agent; if unset only Google sign-in works |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | – | turn on **Sign in with Google** (see below) |
+| `PUBLIC_URL` | from the request | the site's address, used for Google's redirect, e.g. `https://spend-firewall.onrender.com` |
 | `DB_PATH` | `firewall.db` | SQLite file (`:memory:` for throwaway runs) |
 | `SETTLER` | `mock` | settlement rail (`mock` today) |
 | `OPENROUTER_API_KEY` | – | turns on the LLM intent check, drafting rules from plain English, and the LLM demo agent |
 | `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check ($0.10/M in, $0.50/M out; `openai/gpt-4.1-mini` and `google/gemini-2.5-flash` also work but cost more) |
 | `TELEGRAM_BOT_TOKEN` | – | turns on Telegram approvals (from @BotFather) |
-| `TELEGRAM_CHAT_ID` | – | the only chat that gets notifications and may approve or deny; without it the bot only tells you your chat id |
+| `TELEGRAM_CHAT_ID` | – | the chat for agents made with the admin token; signed-in users connect their own chat from the dashboard |
 | `TELEGRAM_NOTIFY_BLOCKED` | `1` | `0` stops the info messages for blocked payments |
+| `TELEGRAM_NOTIFY_PAID` | `1` | `0` stops the "Paid" messages (with receipts) for payments approved without you |
+| `TELEGRAM_BOT_USERNAME` | from Telegram | the bot's @name for Connect Telegram links; looked up with `getMe` when unset |
 | `DEMO_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the demo agent |
+
+## Sign in with Google
+
+Each person signs in with their Google account and sees only their own agents: their mandates, their payments, their approvals. Someone else's agent or payment reads as "not found". The admin token still works beside this, sees every agent, and is what the benchmark and local scripts use.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create an **OAuth client ID** of type **Web application**.
+2. Add the redirect URI `https://<your-site>/auth/google/callback` (and `http://localhost:3000/auth/google/callback` for local use).
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, and `PUBLIC_URL` to the site's address. The dashboard then shows **Sign in with Google**.
+
+Sign-in uses Google's server-side code flow: a random state cookie guards the round trip, the server checks the token's audience, issuer, expiry and verified email, and the browser gets a session cookie the page's scripts can't read (`HttpOnly`, `SameSite=Lax`, `Secure` on https), valid for 30 days. Sessions and link codes are stored only as SHA-256 hashes. Writes on a session also need an `x-sf-csrf` header, which only the dashboard's own page can send. Agents are unchanged: they use their `agt_…` token over MCP, and the token says whose agent it is.
 
 ## Approve from Telegram
 
 The owner gets held payments on their phone, in Telegram, and decides them there. The server polls Telegram, so the phone only needs internet: no public URL, no hotspot or WSL networking.
 
 1. In Telegram, message **@BotFather**, send `/newbot`, and copy the token it gives you into `.env` as `TELEGRAM_BOT_TOKEN=…`.
-2. Start the server (`bun run dev`) and send `/start` to your new bot. It replies with your chat id.
-3. Put it in `.env` as `TELEGRAM_CHAT_ID=…` and restart the server. `/start` now replies "Connected".
+2. **Signed in with Google:** press **Connect Telegram** on the dashboard. It opens the bot with a one-time code (good for 10 minutes); press **Start** and the bot replies "Connected to you@example.com". That chat now gets your agents' messages, and only it can approve them. Press the button again to disconnect.
+3. **With the admin token:** start the server (`bun run dev`) and send `/start` to your bot. It replies with your chat id; put it in `.env` as `TELEGRAM_CHAT_ID=…` and restart. Agents made with the admin token report there.
 
-When a payment is held you get a message naming the agent, the amount, the recipient and why it was held, with **Approve** and **Deny** buttons. Tapping one goes through the same checks as the dashboard (monthly cap, expiry, revoke), and the message is edited to the outcome: approved and settled with its reference, denied, not paid with the reason, or already decided elsewhere (on the dashboard, or by a revoke). Blocked payments, such as the poisoned invoice, arrive as an info message without buttons (`TELEGRAM_NOTIFY_BLOCKED=0` turns these off). Approved payments send nothing. When an agent first reaches 80% of its monthly budget in a month, you get one warning message, for example "⚠️ Cloud infrastructure agent has used 82% of its monthly budget (2,050 of 2,500 USD)."
+When a payment is held you get a message naming the agent, the amount, the recipient and why it was held, with **Approve** and **Deny** buttons. Tapping one goes through the same checks as the dashboard (monthly cap, expiry, revoke), and the message is edited to the outcome: approved and settled with its reference, denied, not paid with the reason, or already decided elsewhere (on the dashboard, or by a revoke). Blocked payments, such as the poisoned invoice, arrive as an info message without buttons (`TELEGRAM_NOTIFY_BLOCKED=0` turns these off). Payments approved without you arrive as a "Paid" message with a link to the receipt on the block explorer (`TELEGRAM_NOTIFY_PAID=0` turns these off). When an agent first reaches 80% of its monthly budget in a month, you get one warning message, for example "⚠️ Cloud infrastructure agent has used 82% of its monthly budget (2,050 of 2,500 USD)."
 
-Only `TELEGRAM_CHAT_ID` can decide; taps and `/start` from other chats are ignored and logged. Messages are plain text. If Telegram is down or misconfigured, the firewall works exactly as before and the module keeps retrying in the background; nothing is ever approved because of a Telegram failure. Payment details (amounts, supplier names) pass through Telegram's servers.
+Only the chat that owns a payment's agent can decide it (the user's linked chat, or `TELEGRAM_CHAT_ID` for admin agents); taps from other chats are refused and logged. A chat belongs to one account at a time. Messages are plain text. If Telegram is down or misconfigured, the firewall works exactly as before and the module keeps retrying in the background; nothing is ever approved because of a Telegram failure. Payment details (amounts, supplier names) pass through Telegram's servers.
 
 ## Approve from a phone
 
@@ -105,9 +119,9 @@ No API key, no network, no running server. Each test name is one promise this RE
 
 ## Deploy (Render)
 
-The repo has a `Dockerfile` and a `render.yaml` blueprint. In Render: **New + → Blueprint**, pick this repository and branch, and apply. Render builds the image, generates a random `ADMIN_TOKEN` (copy it from the service's **Environment** tab), and asks for the optional `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Then open `https://<your-service>.onrender.com/?token=<ADMIN_TOKEN>`, and point agents at `https://<your-service>.onrender.com/mcp`.
+The repo has a `Dockerfile` and a `render.yaml` blueprint. In Render: **New + → Blueprint**, pick this repository and branch, and apply. Render builds the image, generates a random `ADMIN_TOKEN` (copy it from the service's **Environment** tab), and asks for the optional `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `PUBLIC_URL`. With Google set up, people sign in at `https://<your-service>.onrender.com/`. Otherwise open `https://<your-service>.onrender.com/?token=<ADMIN_TOKEN>`, and point agents at `https://<your-service>.onrender.com/mcp`.
 
-On Render's free plan the service sleeps after 15 minutes without traffic (the next request takes about a minute to wake it, and Telegram is paused while it sleeps), and the disk is not kept: the database starts empty on every restart. The deploy adds no demo agents: it opens on **New mandate**, so create your mandate after each restart and give the agent its new token. Open the URL a few minutes before demoing. Use a different Telegram bot from the one on your laptop: two servers polling the same bot fight over its messages.
+On Render's free plan the service sleeps after 15 minutes without traffic (the next request takes about a minute to wake it, and Telegram is paused while it sleeps), and the disk is not kept: the database starts empty on every restart, including accounts: after a restart people sign in again, reconnect Telegram and recreate their agents. The deploy adds no demo agents: it opens on **New mandate**, so create your mandate after each restart and give the agent its new token. Open the URL a few minutes before demoing. Use a different Telegram bot from the one on your laptop: two servers polling the same bot fight over its messages.
 
 The example agents from `bun run seed` (`agt_demo_ada` and so on) have tokens published in this repository, so never seed a public deployment, least of all one with `SETTLER=payfrom`.
 
@@ -219,7 +233,9 @@ The LLM is not deterministic, so re-running can differ slightly. When it fails (
 
 ```
 src/index.ts           Bun.serve: /mcp, /api/*, /
-src/api.ts             REST handlers, ADMIN_TOKEN check, zod validation
+src/api.ts             REST handlers, admin token or session, per-user scoping, zod validation
+src/auth.ts            Sign in with Google: redirect, callback, session cookie
+src/users.ts           accounts, sessions and Telegram link codes (stored hashed)
 src/mcp/server.ts      MCP tools + agent-token auth
 src/core.ts            the real Core, wired from env
 src/core.factory.ts    createCore(deps) / createCoreFromEnv()
