@@ -133,6 +133,7 @@
   #admin-box summary { cursor: pointer; color: var(--ink-2); font-size: var(--t-sm); }
   #token-form { display: flex; align-items: end; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
   #token-form label { flex: 1 1 220px; }
+  .narrow { display: none; }
   #who { color: var(--slate-ink-2); font-size: var(--t-sm); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #loading { color: var(--ink-2); padding: 48px 0; }
   .warn-text { color: var(--hold); font-weight: 600; margin: 0 0 14px; }
@@ -283,8 +284,12 @@
   .untrusted { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 15px/1.6 var(--type);
                background: var(--strip-2); border: 1px dashed var(--stop-rule); border-radius: 4px; padding: 12px 14px; color: var(--ink); }
   .dlg .checks { padding: 0; background: none; border: 0; gap: 10px; }
-  .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 18px; margin: 0; }
-  .facts dt, .facts dd { padding: 0; border: 0; text-align: left; }
+  .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 18px; margin: 0; }
+  .facts dt, .facts dd { padding: 0; border: 0; text-align: left; min-width: 0; overflow-wrap: anywhere; }
+  dialog { overflow-x: hidden; }
+  .dlg > * { min-width: 0; }
+  .dlg-head h2 { min-width: 0; overflow-wrap: anywhere; }
+  .dlg pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   .facts dd { font-weight: 600; }
 
   /* ---- connect / try ---- */
@@ -337,8 +342,20 @@
     .wrap { padding: 0 16px; }
     main#main { gap: 28px; padding-top: 16px; }
     .crumb { display: none; }
-    .hdr { margin-left: 0; width: 100%; }
-    .hdr select { flex: 1 1 100%; max-width: none; }
+    /* Header: brand, Live and theme on one line; the agent switcher and the actions below it.
+       It scrolls away instead of staying pinned, so it never eats the screen. */
+    .top { position: static; }
+    .topbar { gap: 8px; min-height: 0; padding-top: 10px; padding-bottom: 12px; }
+    .brand { font-size: 18px; gap: 10px; }
+    .hdr { display: contents; }
+    .brand { order: 0; }
+    .live { order: 1; margin-left: auto; }
+    #theme-btn { order: 2; }
+    .hdr select { order: 3; flex: 1 1 100%; max-width: none; min-height: 40px; }
+    #new-btn, #tg-btn, #signout { order: 4; flex: 1 1 auto; min-height: 38px; padding: 7px 10px; font-size: 14px; }
+    #who { display: none; }
+    .top .wide { display: none; }
+    .top .narrow { display: inline; }
     form.panel, section.panel, details.panel { padding: 20px 16px; }
     .hero { border-left-width: 6px; }
     .tile { padding: 12px 14px; }
@@ -943,7 +960,7 @@ function renderMandate(m, limits, payments) {
   const st = stateOf(m);
   $("mandate").replaceChildren(...h("div", {},
     h("div", { class: "name" }, m.name),
-    h("div", { class: "sub inline" }, h("span", { class: `state ${st}` }, STATE_WORD[st]), h("span", {}, m.currency), m.expiresAt ? h("span", {}, `Expires ${new Date(m.expiresAt).toLocaleDateString()}`) : null),
+    h("div", { class: "sub inline" }, h("span", { class: `state ${st}` }, STATE_WORD[st]), h("span", {}, m.currency), m.expiresAt ? h("span", {}, `Expires ${new Date(m.expiresAt).toLocaleDateString(undefined, { timeZone: "UTC" })}`) : null),
     h("div", { class: "task" }, m.task),
     budgetBadge(limits.budget),
     h("div", { class: `meter ${used >= 100 ? "full" : used >= 80 ? "warn" : ""}`, role: "progressbar", "aria-valuemin": 0, "aria-valuemax": limits.monthlyCap, "aria-valuenow": limits.spentThisMonth, "aria-label": "Monthly budget used", style: "margin-top:16px" },
@@ -1287,7 +1304,13 @@ function renderAccount() {
   $("who").textContent = user ? user.email : "";
   $("who").title = user ? `Signed in as ${user.name} (${user.email})` : "";
   $("tg-btn").hidden = !user;
-  if (user) $("tg-btn").textContent = user.telegramLinked ? "Telegram connected" : "Connect Telegram";
+  if (user) {
+    // Full label on wide screens; on phones the "wide" parts hide so the actions fit on one row.
+    const linked = user.telegramLinked;
+    $("tg-btn").replaceChildren(h("span", {}, linked ? "" : h("span", { class: "wide" }, "Connect "), "Telegram",
+      linked ? h("span", { class: "wide" }, " connected") : "", linked ? h("span", { class: "narrow" }, " ✓") : ""));
+    $("tg-btn").setAttribute("aria-label", linked ? "Telegram connected" : "Connect Telegram");
+  }
 }
 async function loadUser() {
   try {
