@@ -329,3 +329,50 @@ describe("budget alerts", () => {
     expect(alerts()).toEqual([]);
   });
 });
+
+describe("receipts", () => {
+  // A settler like PayFrom on Solana: a signature for the reference and an explorer link.
+  const withReceipts: import("../../src/types").Settler = {
+    name: "receipts", supports: () => true,
+    send: async (p) => ({ reference: `sig_${p.paymentId}`, receiptUrl: `https://solscan.io/tx/sig_${p.paymentId}` }),
+  };
+  beforeEach(() => { ({ core, db } = testSetup({ settler: withReceipts })); });
+
+  test("a payment approved on its own is reported once, with its receipt", async () => {
+    const t = telegram();
+    const p = await pay(50);
+    expect(p.status).toBe("settled");
+    await t.tick();
+    await t.tick();
+    const sent = tg.of("sendMessage");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.params.reply_markup).toBeUndefined();
+    expect(sent[0]!.params.text).toBe([
+      `✅ Paid. Ref sig_pa…${p.id.slice(-4)}`, "50 USDC → Lagos Textiles Ltd", "For: SZP-5530 machine parts", "Agent: Ada Imports — ops agent",
+      `🧾 Receipt: https://solscan.io/tx/sig_${p.id}`, `ID: ${p.id}`].join("\n"));
+    expect(getTelegramMessage(db, p.id)).toMatchObject({ kind: "paid", final: true });
+  });
+
+  test("approving a held payment edits the message with the receipt", async () => {
+    const t = telegram();
+    const p = await pay(650, SHENZHEN);
+    await t.tick();
+    await tap(t, `a:${p.id}`);
+    expect(edits()[0]).toContain(`🧾 Receipt: https://solscan.io/tx/sig_${p.id}`);
+  });
+
+  test("approved on the dashboard: the edited message carries the receipt too", async () => {
+    const t = telegram();
+    const p = await pay(650, SHENZHEN);
+    await t.tick();
+    await core.approvePayment(p.id);
+    await t.tick();
+    expect(edits()[0]).toContain(`🧾 Receipt: https://solscan.io/tx/sig_${p.id}`);
+  });
+
+  test("TELEGRAM_NOTIFY_PAID=0 (notifyPaid: false) keeps paid payments quiet", async () => {
+    await pay(50);
+    await telegram({ notifyPaid: false }).tick();
+    expect(tg.of("sendMessage")).toHaveLength(0);
+  });
+});

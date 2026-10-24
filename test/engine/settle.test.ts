@@ -76,11 +76,12 @@ describe("payfrom settler", () => {
   test("builds a receipt link for a known chain and none for an unknown one", async () => {
     const once = createPayfromSettler(deps(script([], [() => broadcasted(), () => statusOf("CONFIRMED")])));
     expect((await once.send(send("pay_1"))).receiptUrl).toBe("https://sepolia.basescan.org/tx/0xdead");
-    const other = createPayfromSettler({
-      ...deps(script([], [() => broadcasted(), () => statusOf("CONFIRMED")])),
-      assetKey: "solana:usdc",
-    });
-    expect((await other.send(send("pay_1"))).receiptUrl).toBeUndefined();
+    const onChain = async (assetKey: string) => (await createPayfromSettler({
+      ...deps(script([], [() => broadcasted(), () => statusOf("CONFIRMED")])), assetKey,
+    }).send(send("pay_1"))).receiptUrl;
+    expect(await onChain("solana:usdc")).toBe("https://solscan.io/tx/0xdead");
+    expect(await onChain("solana-devnet:usdc")).toBe("https://solscan.io/tx/0xdead?cluster=devnet");
+    expect(await onChain("tron:usdc")).toBeUndefined();
   });
 
   test("polls the transaction until CONFIRMED", async () => {

@@ -495,14 +495,14 @@ function h(tag, attrs, ...kids) {
     if (k === "class") el.className = v; else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
     else if (v !== false && v != null) el.setAttribute(k, v);
   }
-  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+  for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid);
   return el;
 }
 const SVG = "http://www.w3.org/2000/svg";
 function s(tag, attrs, ...kids) {
   const el = document.createElementNS(SVG, tag);
   for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
-  for (const kid of kids.flat()) if (kid != null) el.append(kid);
+  for (const kid of kids.flat(Infinity)) if (kid != null) el.append(kid);
   return el;
 }
 const ICONS = {
@@ -634,10 +634,14 @@ function keepFocus(render) {
 
 // ---- messages ----
 function showError(msg) { $("banner").textContent = msg; $("banner").classList.toggle("show", !!msg); }
-function toast(msg, kind = "") {
+function toast(msg, kind = "", ms = 5000) {
   const t = h("div", { class: "toast" }, kind ? icon(kind) : null, msg);
   $("toasts").append(t);
-  setTimeout(() => t.remove(), 5000);
+  setTimeout(() => t.remove(), ms);
+}
+// A link to the payment on the chain's explorer, when the rail gave one.
+function receiptLink(p, text = "View receipt") {
+  return p.receiptUrl ? [" ", h("a", { href: p.receiptUrl, target: "_blank", rel: "noopener noreferrer" }, text)] : null;
 }
 function announce(msg) { $("announce").textContent = ""; setTimeout(() => { $("announce").textContent = msg; }, 50); }
 function renderLive() {
@@ -749,7 +753,7 @@ async function decide(p, action, btns, card) {
     decidedHere.add(p.id);
     showError("");
     const last = r.checks.at(-1);
-    if (r.status === "settled") toast(`Approved and settled. Ref ${short(r.reference || "")}`, "check");
+    if (r.status === "settled") toast([`Approved and settled. Ref ${short(r.reference || "")}`, receiptLink(r)], "check", r.receiptUrl ? 10000 : 5000);
     else if (action === "deny") toast(`Denied. ${money(r.amount, r.currency)} was not paid.`, "x");
     else toast(`Not paid: ${last && !last.pass ? last.reason : r.status}`, "alert");
     card.classList.add("leaving");
@@ -866,7 +870,8 @@ function openDetail(p) {
       h("dt", {}, "Purpose"), h("dd", {}, p.purpose),
       h("dt", {}, "When"), h("dd", {}, new Date(p.createdAt).toLocaleString()),
       h("dt", {}, "Outcome"), h("dd", {}, chip(o)),
-      p.reference ? [h("dt", {}, "Reference"), h("dd", { class: "ref" }, p.reference)] : null),
+      p.reference ? [h("dt", {}, "Reference"), h("dd", { class: "ref" }, p.reference)] : null,
+      p.receiptUrl ? [h("dt", {}, "Receipt"), h("dd", {}, receiptLink(p, "View on the block explorer"))] : null),
     h("div", {}, h("h3", {}, "Untrusted content the agent read"),
       p.context ? h("pre", { class: "untrusted", tabindex: "0", "aria-label": "Untrusted content the agent read" }, p.context)
         : h("p", { class: "sub" }, "The agent sent no content with this request.")),

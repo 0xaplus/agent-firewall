@@ -13,13 +13,17 @@ const TRANSIENT = new Set(["network_error", "sponsorship_unavailable"]);
 export const DEFAULT_ASSET_KEY = "base-sepolia:usdc"; // USDC on Base Sepolia (test env)
 
 // Build a receipt link from the chain's explorer when we know it (GET /v1/chains lists explorerUrl).
+// {tx} is replaced by the transaction hash (a signature on Solana).
 const EXPLORERS: Record<string, string> = {
-  "base-sepolia": "https://sepolia.basescan.org/tx/",
-  "ethereum-sepolia": "https://sepolia.etherscan.io/tx/",
-  base: "https://basescan.org/tx/",
-  ethereum: "https://etherscan.io/tx/",
-  bsc: "https://bscscan.com/tx/",
-  polygon: "https://polygonscan.com/tx/",
+  "base-sepolia": "https://sepolia.basescan.org/tx/{tx}",
+  "ethereum-sepolia": "https://sepolia.etherscan.io/tx/{tx}",
+  base: "https://basescan.org/tx/{tx}",
+  ethereum: "https://etherscan.io/tx/{tx}",
+  bsc: "https://bscscan.com/tx/{tx}",
+  polygon: "https://polygonscan.com/tx/{tx}",
+  solana: "https://solscan.io/tx/{tx}",
+  "solana-mainnet": "https://solscan.io/tx/{tx}",
+  "solana-devnet": "https://solscan.io/tx/{tx}?cluster=devnet",
 };
 
 export interface PayfromDeps {
@@ -117,8 +121,8 @@ export function createPayfromSettler({
   }
 
   function receiptFor(asset: string, txHash: string): string | undefined {
-    const base = EXPLORERS[asset.split(":")[0]!];
-    return base ? `${base}${txHash}` : undefined;
+    const link = EXPLORERS[asset.split(":")[0]!];
+    return link ? link.replace("{tx}", txHash) : undefined;
   }
 
   // Auth'ed JSON call; returns a normalised result and never throws for the caller.
