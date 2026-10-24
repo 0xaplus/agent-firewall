@@ -88,6 +88,7 @@ All routes need `Authorization: Bearer $ADMIN_TOKEN`. Errors are `{ "error": "�
 - `GET /api/payments?mandateId=`
 - `POST /api/payments/:id/approve`, `POST /api/payments/:id/deny` (only while `pending_approval`)
 - `GET /api/stats?mandateId=`
+- `GET /api/audit/verify`: re-computes the audit log's hash chain, `{ ok, entries }` or `{ ok: false, entries, brokenAt }`
 
 ## Connect your own agent
 
@@ -142,6 +143,12 @@ R9 and the amount sanity check (positive, finite) are additions to the plan's R0
 
 If nothing blocked, one LLM call audits intent (5 s timeout). It treats the invoice or email as untrusted data. It can only make the outcome stricter: injection suspected → block, off-task → escalate, error or timeout or unreadable reply → escalate. With no `OPENROUTER_API_KEY` the intent check is off and a warning is logged at startup. Every request is stored, blocked ones included. Revoking a mandate stops its token and denies any payment still waiting for approval.
 
+## Audit log
+
+Every payment event is written to an append-only `audit_log` table: one row when a request is judged and stored, and one per status change (approved and settled, denied, denied on revoke, failed), in the same transaction as the change. Each row stores `sha256` of its own fields and the previous row's hash, so editing or deleting a row breaks every hash from that row on. The dashboard shows "Audit log verified" under the totals, re-checked every 2 seconds, and `GET /api/audit/verify` says which row broke.
+
+Limits: the chain shows that rows were changed, not who changed them. Someone with write access to the database could delete the newest rows or rebuild the whole chain; anchoring the latest hash somewhere outside the database would close that, and is not built.
+
 ## Benchmark
 
 `bench/attacks.json` holds 20 attacks in six categories: hidden instructions, swapped address, lookalike address, inflated amount, split payments and fake urgency. `bun run bench` sends each one two ways:
@@ -168,6 +175,7 @@ src/core.ts            the real Core, wired from env
 src/core.factory.ts    createCore(deps) / createCoreFromEnv()
 src/db.ts              SQLite schema + queries
 src/payments.ts        payment lifecycle: every status change (open, settle, approve, deny, deny on revoke)
+src/audit.ts           hash-chained audit log: appendAudit, verifyAudit
 src/errors.ts          CoreError: not_found / wrong_state, mapped to 404 / 409
 src/seed.ts            demo mandate
 src/engine/            rules.ts, risk.ts, intent.ts, evaluate.ts
