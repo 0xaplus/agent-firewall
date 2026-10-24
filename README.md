@@ -60,7 +60,22 @@ Environment:
 | `SETTLER` | `mock` | settlement rail (`mock` today) |
 | `OPENROUTER_API_KEY` | – | turns on the LLM intent check, drafting rules from plain English, and the LLM demo agent |
 | `INTENT_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the intent check ($0.10/M in, $0.50/M out; `openai/gpt-4.1-mini` and `google/gemini-2.5-flash` also work but cost more) |
+| `TELEGRAM_BOT_TOKEN` | – | turns on Telegram approvals (from @BotFather) |
+| `TELEGRAM_CHAT_ID` | – | the only chat that gets notifications and may approve or deny; without it the bot only tells you your chat id |
+| `TELEGRAM_NOTIFY_BLOCKED` | `1` | `0` stops the info messages for blocked payments |
 | `DEMO_MODEL` | `anthropic/claude-haiku-5.5` | OpenRouter model for the demo agent |
+
+## Approve from Telegram
+
+The owner gets held payments on their phone, in Telegram, and decides them there. The server polls Telegram, so the phone only needs internet: no public URL, no hotspot or WSL networking.
+
+1. In Telegram, message **@BotFather**, send `/newbot`, and copy the token it gives you into `.env` as `TELEGRAM_BOT_TOKEN=…`.
+2. Start the server (`bun run dev`) and send `/start` to your new bot. It replies with your chat id.
+3. Put it in `.env` as `TELEGRAM_CHAT_ID=…` and restart the server. `/start` now replies "Connected".
+
+When a payment is held you get a message naming the agent, the amount, the recipient and why it was held, with **Approve** and **Deny** buttons. Tapping one goes through the same checks as the dashboard (monthly cap, expiry, revoke), and the message is edited to the outcome: approved and settled with its reference, denied, not paid with the reason, or already decided elsewhere (on the dashboard, or by a revoke). Blocked payments, such as the poisoned invoice, arrive as an info message without buttons (`TELEGRAM_NOTIFY_BLOCKED=0` turns these off). Approved payments send nothing.
+
+Only `TELEGRAM_CHAT_ID` can decide; taps and `/start` from other chats are ignored and logged. Messages are plain text. If Telegram is down or misconfigured, the firewall works exactly as before and the module keeps retrying in the background; nothing is ever approved because of a Telegram failure. Payment details (amounts, supplier names) pass through Telegram's servers.
 
 ## Approve from a phone
 
@@ -195,6 +210,7 @@ src/db.ts              SQLite schema + queries
 src/payments.ts        payment lifecycle: every status change (open, settle, approve, deny, deny on revoke)
 src/schema.ts          zod schema for a new mandate (REST and drafts)
 src/compile.ts         drafts a mandate from plain-English rules (never saves)
+src/telegram.ts        Telegram approvals: notifications, Approve / Deny buttons, long polling
 src/audit.ts           hash-chained audit log: appendAudit, verifyAudit
 src/errors.ts          CoreError: not_found / wrong_state, mapped to 404 / 409
 src/seed.ts            demo mandate

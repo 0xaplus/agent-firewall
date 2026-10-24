@@ -1,0 +1,255 @@
+// Telegram approvals: a channel to the owner's phone, nothing more. Held payments arrive with
+// Approve / Deny buttons that call the same Core methods as the dashboard, so every rule still applies.
+// Long polling, so no public URL is needed. Any Telegram failure is logged and never reaches a payment.
+import type { Database } from "bun:sqlite";
+import { getTelegramMessage, insertTelegramMessage, markTelegramFinal } from "./db";
+import { CoreError } from "./errors";
+import type { Core, Mandate, Payment } from "./types";
+
+export interface TelegramApi {
+  call(method: string, params: object, signal?: AbortSignal): Promise<any>;
+}
+
+export class TelegramError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+    this.name = "TelegramError";
+  }
+}
+
+// The token is part of every URL, so it is scrubbed from anything that could be logged.
+export function telegramApi(token: string, doFetch: typeof fetch = fetch): TelegramApi {
+  const scrub = (s: string) => s.replaceAll(token, "<token>");
+  return {
+    async call(method, params, signal) {
+      let res: Response;
+      try {
+        res = await doFetch(`https://api.telegram.org/bot${token}/${method}`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params), signal,
+        });
+      } catch (err) {
+        throw new TelegramError(scrub(`Telegram ${method} failed: ${err instanceof Error ? err.message : String(err)}`));
+      }
+      const body: any = await res.json().catch(() => ({}));
+      if (!res.ok || !body.ok) {
+        const status = body.error_code ?? res.status;
+        throw new TelegramError(scrub(`Telegram ${method} failed (${status}): ${body.description ?? "no description"}`), status);
+      }
+      return body.result;
+    },
+  };
+}
+
+// ---- message text (plain text only: purpose and reasons come from the agent and may be hostile) ----
+
+const short = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+const money = (p: Payment) => `${p.amount} ${p.currency}`;
+const failedReasons = (p: Payment) => cut(p.checks.filter((c) => !c.pass).map((c) => c.reason).join(" "), 600);
+
+function payee(p: Payment, m: Mandate | null): string {
+  const r = m?.allowlist.find((x) => x.address === p.recipient);
+  return r ? r.label : `${short(p.recipient)} (not on the allowlist)`;
+}
+
+function summary(p: Payment, m: Mandate | null): string[] {
+  return [`${money(p)} → ${payee(p, m)}`, `Agent: ${m?.name ?? p.mandateId}`];
+}
+
+export function heldText(p: Payment, m: Mandate | null): string {
+  const [line, agent] = summary(p, m);
+  return ["⏸ Payment waiting for you", line, `For: ${cut(p.purpose, 200)}`, agent, `Held because: ${failedReasons(p)}`, `ID: ${p.id}`].join("\n");
+}
+
+export function blockedText(p: Payment, m: Mandate | null): string {
+  const [line, agent] = summary(p, m);
+  return ["🛑 Payment blocked", line, agent, `Why: ${failedReasons(p)}`, `ID: ${p.id}`].join("\n");
+}
+
+// What happened to a payment, as the first line of the edited message.
+export function outcomeLine(p: Payment, how: "approved" | "denied" | "elsewhere"): string {
+  const last = p.checks.at(-1);
+  if (how === "denied") return "❌ Denied by you.";
+  if (how === "approved") {
+    if (p.status === "settled") return `✅ Approved — settled. Ref ${short(p.reference ?? "")}`;
+    if ((p.status === "denied" || p.status === "failed") && last && !last.pass) return `⛔ Not paid: ${last.reason}`;
+    return `ℹ️ Approved — ${p.status.replaceAll("_", " ")}`;
+  }
+  const why = p.status === "denied" && last && !last.pass && last.severity === "block" ? ` (${last.reason})` : "";
+  return `ℹ️ Already decided elsewhere: ${p.status.replaceAll("_", " ")}${why}`;
+}
+
+const decidedText = (p: Payment, m: Mandate | null, how: "approved" | "denied" | "elsewhere") =>
+  [outcomeLine(p, how), ...summary(p, m), `ID: ${p.id}`].join("\n");
+
+const keyboard = (id: string) => ({ inline_keyboard: [[{ text: "Approve", callback_data: `a:${id}` }, { text: "Deny", callback_data: `d:${id}` }]] });
+
+// ---- the module ----
+
+export interface TelegramOptions {
+  core: Core;
+  db: Database;
+  api: TelegramApi;
+  chatId: string | null;           // null: setup mode, only answers /start with the chat id
+  notifyBlocked?: boolean;
+  now?: () => Date;
+  log?: (msg: string) => void;
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+}
+
+const realSleep = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => { clearTimeout(t); resolve(); }, { once: true });
+  });
+
+export function createTelegram(opts: TelegramOptions) {
+  const { core, db, api, chatId } = opts;
+  const notifyBlocked = opts.notifyBlocked ?? true;
+  const log = opts.log ?? ((m: string) => console.warn(m));
+  const sleep = opts.sleep ?? realSleep;
+  const startedAt = (opts.now ?? (() => new Date()))().toISOString();
+  const deciding = new Set<string>(); // taps in progress: the tick leaves these alone
+  const mandates = new Map<string, Mandate | null>();
+  const mandateOf = (id: string) => {
+    if (!mandates.has(id)) mandates.set(id, core.getMandate(id));
+    return mandates.get(id)!;
+  };
+  const fresh = (id: string) => { mandates.delete(id); return mandateOf(id); };
+
+  const edit = async (chat: string, messageId: number, text: string) => {
+    try {
+      await api.call("editMessageText", { chat_id: chat, message_id: messageId, text });
+    } catch (err) {
+      if (!String((err as Error).message).includes("message is not modified")) throw err;
+    }
+  };
+
+  // One pass: notify new held and blocked payments, and update messages decided elsewhere.
+  async function tick(): Promise<void> {
+    if (!chatId) return;
+    let payments: Payment[];
+    try { payments = core.listPayments(); } catch (err) { log(`telegram: could not list payments: ${(err as Error).message}`); return; }
+    for (const p of [...payments].reverse()) {
+      if (deciding.has(p.id)) continue;
+      try {
+        const rec = getTelegramMessage(db, p.id);
+        if (!rec) {
+          const held = p.status === "pending_approval";
+          const blocked = notifyBlocked && p.verdict === "blocked" && p.createdAt >= startedAt;
+          if (!held && !blocked) continue;
+          const m = held ? fresh(p.mandateId) : mandateOf(p.mandateId);
+          const sent = await api.call("sendMessage", held
+            ? { chat_id: chatId, text: heldText(p, m), reply_markup: keyboard(p.id) }
+            : { chat_id: chatId, text: blockedText(p, m) });
+          insertTelegramMessage(db, { paymentId: p.id, chatId, messageId: sent.message_id, kind: held ? "held" : "blocked", final: !held, createdAt: new Date().toISOString() });
+        } else if (!rec.final && p.status !== "pending_approval") {
+          await edit(rec.chatId, rec.messageId, decidedText(p, mandateOf(p.mandateId), "elsewhere"));
+          markTelegramFinal(db, p.id);
+        }
+      } catch (err) {
+        log(`telegram: ${p.id}: ${(err as Error).message}`); // retried on the next tick
+      }
+    }
+  }
+
+  async function onStart(chat: string): Promise<void> {
+    if (!chatId) {
+      const hint = `Your chat id is ${chat}. Set TELEGRAM_CHAT_ID=${chat} in .env and restart the server.`;
+      log(`telegram: ${hint}`);
+      await api.call("sendMessage", { chat_id: chat, text: hint });
+    } else if (chat === chatId) {
+      await api.call("sendMessage", { chat_id: chat, text: "Connected. Held payments will appear here." });
+    } else {
+      log(`telegram: ignored /start from chat ${chat}`);
+    }
+  }
+
+  async function onTap(cq: any): Promise<void> {
+    const chat = String(cq.message?.chat?.id ?? "");
+    const match = /^([ad]):(\S+)$/.exec(String(cq.data ?? ""));
+    const allowed = !!chatId && chat === chatId && !!match;
+    await api.call("answerCallbackQuery", { callback_query_id: cq.id, text: !allowed ? "Not allowed" : match![1] === "a" ? "Approving…" : "Denying…" });
+    if (!allowed) { log(`telegram: ignored a button tap from chat ${chat}`); return; }
+
+    const [, action, id] = match!;
+    const messageId: number = cq.message.message_id;
+    deciding.add(id!);
+    try {
+      let text: string;
+      try {
+        const p = action === "a" ? await core.approvePayment(id!) : core.denyPayment(id!);
+        text = decidedText(p, mandateOf(p.mandateId), action === "a" ? "approved" : "denied");
+      } catch (err) {
+        const now = err instanceof CoreError ? core.getPayment(id!) : null;
+        if (now) text = decidedText(now, mandateOf(now.mandateId), "elsewhere");
+        else {
+          if (!(err instanceof CoreError)) log(`telegram: deciding ${id} failed: ${(err as Error).message}`);
+          text = "Something went wrong; decide on the dashboard.";
+        }
+      }
+      markTelegramFinal(db, id!);
+      await edit(chat, messageId, text);
+    } finally {
+      deciding.delete(id!);
+    }
+  }
+
+  async function handleUpdate(u: any): Promise<void> {
+    if (u.callback_query) return onTap(u.callback_query);
+    const text = u.message?.text;
+    if (typeof text === "string" && text.trim().startsWith("/start")) return onStart(String(u.message.chat.id));
+  }
+
+  // Long polling. Errors back off 2 s, doubling to 30 s; a 409 (another poller) is logged once.
+  async function pollLoop(signal: AbortSignal): Promise<void> {
+    let offset = 0, delay = 2000, said409 = false;
+    while (!signal.aborted) {
+      try {
+        const updates: any[] = await api.call("getUpdates", { offset, timeout: 25, allowed_updates: ["message", "callback_query"] }, signal);
+        delay = 2000;
+        for (const u of updates) {
+          offset = u.update_id + 1;
+          try { await handleUpdate(u); } catch (err) { log(`telegram: update ${u.update_id}: ${(err as Error).message}`); }
+        }
+      } catch (err) {
+        if (signal.aborted) break;
+        if (err instanceof TelegramError && err.status === 409) {
+          if (!said409) log("telegram: another process is polling this bot (409); backing off until it stops.");
+          said409 = true;
+        } else {
+          log(`telegram: ${(err as Error).message}; retrying in ${delay / 1000} s`);
+        }
+        await sleep(delay, signal);
+        delay = Math.min(delay * 2, 30_000);
+      }
+    }
+  }
+
+  return { tick, handleUpdate, pollLoop };
+}
+
+// Starts both loops. Returns a stop function.
+export function startTelegram(opts: TelegramOptions & { intervalMs?: number }): () => void {
+  const t = createTelegram(opts);
+  const ac = new AbortController();
+  let running = false;
+  const timer = opts.chatId ? setInterval(async () => {
+    if (running) return;
+    running = true;
+    try { await t.tick(); } finally { running = false; }
+  }, opts.intervalMs ?? 2000) : null;
+  void t.pollLoop(ac.signal);
+  return () => { ac.abort(); if (timer) clearInterval(timer); };
+}
+
+// Off unless TELEGRAM_BOT_TOKEN is set; setup mode until TELEGRAM_CHAT_ID is set too.
+export function startTelegramFromEnv(core: Core, db: Database, env: Record<string, string | undefined> = process.env,
+  log: (m: string) => void = (m) => console.log(m)): (() => void) | null {
+  const token = env.TELEGRAM_BOT_TOKEN?.trim();
+  if (!token) { log("TELEGRAM_BOT_TOKEN not set: Telegram approvals are off."); return null; }
+  const chatId = env.TELEGRAM_CHAT_ID?.trim() || null;
+  log(chatId ? "Telegram approvals on: held payments go to your Telegram chat."
+    : "Telegram setup mode: send /start to your bot to get your chat id, then set TELEGRAM_CHAT_ID and restart.");
+  return startTelegram({ core, db, api: telegramApi(token), chatId, notifyBlocked: env.TELEGRAM_NOTIFY_BLOCKED !== "0", log });
+}

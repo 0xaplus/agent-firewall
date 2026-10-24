@@ -37,6 +37,14 @@ export function openDb(path = process.env.DB_PATH ?? "firewall.db"): Database {
     created_at TEXT NOT NULL
   )`);
   db.run("CREATE INDEX IF NOT EXISTS payments_mandate_created ON payments (mandate_id, created_at)");
+  db.run(`CREATE TABLE IF NOT EXISTS telegram_messages (
+    payment_id TEXT PRIMARY KEY,
+    chat_id TEXT NOT NULL,
+    message_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    final INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  )`);
   db.run(`CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payment_id TEXT NOT NULL,
@@ -150,4 +158,26 @@ export function recentPayments(db: Database, mandateId: string, minutes: number,
 export function historyTo(db: Database, mandateId: string, recipient: string): number[] {
   return (db.query("SELECT amount FROM payments WHERE mandate_id = ? AND recipient = ? AND status = 'settled' ORDER BY created_at")
     .all(mandateId, recipient) as { amount: number }[]).map((r) => r.amount);
+}
+
+// ---- telegram messages: one per notified payment, so restarts don't resend ----
+
+export interface TelegramMessage { paymentId: string; chatId: string; messageId: number; kind: "held" | "blocked"; final: boolean; createdAt: string }
+
+const toTelegramMessage = (r: any): TelegramMessage => ({
+  paymentId: r.payment_id, chatId: r.chat_id, messageId: r.message_id, kind: r.kind, final: r.final === 1, createdAt: r.created_at,
+});
+
+export function getTelegramMessage(db: Database, paymentId: string): TelegramMessage | null {
+  const r = db.query("SELECT * FROM telegram_messages WHERE payment_id = ?").get(paymentId);
+  return r ? toTelegramMessage(r) : null;
+}
+
+export function insertTelegramMessage(db: Database, m: TelegramMessage): void {
+  db.query("INSERT OR IGNORE INTO telegram_messages VALUES (?, ?, ?, ?, ?, ?)")
+    .run(m.paymentId, m.chatId, m.messageId, m.kind, m.final ? 1 : 0, m.createdAt);
+}
+
+export function markTelegramFinal(db: Database, paymentId: string): void {
+  db.query("UPDATE telegram_messages SET final = 1 WHERE payment_id = ?").run(paymentId);
 }
