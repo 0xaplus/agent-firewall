@@ -4,7 +4,7 @@ import { createCore } from "../src/core.factory";
 import { openDb } from "../src/db";
 import type { IntentLlm } from "../src/engine/intent";
 import { DEMO_AGENT_TOKEN, DEMO_MANDATE } from "../src/fixtures";
-import { seedDemo } from "../src/seed";
+import { NAIRA_MANDATE, seedDemo, seedNaira } from "../src/seed";
 import { createMockSettler } from "../src/settle/mock";
 import type { Core } from "../src/types";
 
@@ -163,6 +163,17 @@ describe("seed", () => {
     expect(seedDemo(fresh)).toBe(true);
     expect(seedDemo(fresh)).toBe(false);
     expect(createCore({ db: fresh, settler: createMockSettler() }).mandateForToken(DEMO_AGENT_TOKEN)?.id).toBe(DEMO_MANDATE.id);
+  });
+  test("seedNaira adds a naira mandate once, alongside the USDC one, with its own token", async () => {
+    const fresh = openDb(":memory:");
+    expect([seedDemo(fresh), seedNaira(fresh), seedNaira(fresh)]).toEqual([true, true, false]);
+    const c = createCore({ db: fresh, settler: createMockSettler() });
+    expect(c.mandateForToken(NAIRA_MANDATE.agentToken)?.id).toBe("mdt_lagos");
+    expect(c.mandateForToken(DEMO_AGENT_TOKEN)?.id).toBe(DEMO_MANDATE.id);
+    expect(NAIRA_MANDATE.agentToken).not.toBe(DEMO_AGENT_TOKEN);
+    const p = await c.requestPayment("mdt_lagos", { amount: 25_000, recipient: NAIRA_MANDATE.allowlist[0]!.address, purpose: "Produce" });
+    expect([p.verdict, p.status, p.currency]).toEqual(["approved", "settled", "NGN"]);
+    expect((await c.requestPayment("mdt_lagos", { amount: 120_000, recipient: NAIRA_MANDATE.allowlist[1]!.address, purpose: "Cold room" })).verdict).toBe("needs_approval");
   });
 });
 

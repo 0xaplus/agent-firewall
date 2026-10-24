@@ -522,11 +522,17 @@ function switchTo(id) {
 }
 
 // ---- first run / choosing a mandate ----
+// The demo mandates from `bun run seed`. The API has no "list mandates" call, so look them up by id.
+const SEEDED = ["mdt_ada", "mdt_lagos"];
 async function bootstrap() {
   if (mandateId) return;
-  const list = known();
-  if (list.length) { mandateId = list[0].id; return; }
-  try { const m = await api("/api/mandates/mdt_ada"); remember(m); mandateId = m.id; } catch (e) { if (e.status === 401) throw e; }
+  const current = known()[0]?.id;
+  // Newly found ones go to the front of the list, so look up in reverse: the first seeded mandate ends up first.
+  for (const id of [...SEEDED].reverse()) {
+    if (known().some((k) => k.id === id)) continue;
+    try { remember(await api(`/api/mandates/${id}`)); } catch (e) { if (e.status === 401) throw e; }
+  }
+  mandateId = current || known()[0]?.id || "";
 }
 
 const CREATE_HINT = $("create-hint").textContent;
