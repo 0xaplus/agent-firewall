@@ -1,7 +1,8 @@
-import { core } from "./core";
+import { core, db } from "./core";
 import { handleApi } from "./api";
 import { handleMcp } from "./mcp/server";
 import { startupMessage } from "./net";
+import { startTelegramFromEnv } from "./telegram";
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -20,3 +21,4 @@ const server = Bun.serve({
 });
 
 console.log(startupMessage(server.port ?? port));
+startTelegramFromEnv(core, db);
