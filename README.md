@@ -19,7 +19,7 @@ Mandates are currency- and rail-agnostic: every limit is in the mandate's curren
 
 ## The owner's journey
 
-1. **Sign in.** Open the dashboard with your admin token. On a fresh database it opens on "New mandate"; if you ran `bun run seed` it opens on the demo mandate.
+1. **Sign in.** Open the dashboard with your admin token. On a fresh database it opens on "New mandate"; with one mandate it opens on that mandate, and with two or more (for example after `bun run seed`) on **All agents**.
 2. **Create a mandate.** Name, what the agent is for, a currency, an auto-approve limit, a hard limit, a monthly cap, and who may be paid (an address and a label each). Each mandate is one agent with its own budget and rules; you can add as many as you like and switch between them from the header.
    Or describe the rules in plain English ("Naira only, up to ₦50,000 without asking me, never more than ₦300,000, ₦1,000,000 a month, pay Lagos Textiles at 0123456789") and press **Draft rules**: a model fills the form, and notes say what it left empty and why. A recipient is kept only if its address appears in your text, so addresses are never invented; impossible limits (auto-approve above the hard limit, hard limit above the cap) are left for you to set. Nothing is saved until you check the form and press Create. Needs `OPENROUTER_API_KEY`.
 3. **Connect an agent.** Right after creating a mandate, the dashboard shows the MCP endpoint and the agent's token as ready-to-paste snippets for Claude Code, Claude Desktop and any other MCP client. "Connect an agent" on the mandate card shows them again.
