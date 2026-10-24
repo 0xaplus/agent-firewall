@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import { getMandate, getMandateByToken, getPayment, insertMandate, listPayments, monthSpend, openDb, setMandateStatus } from "./db";
 import { evaluate, type EvalDeps } from "./engine/evaluate";
 import { verifyAudit } from "./audit";
@@ -74,9 +75,15 @@ export function createCore(deps: EvalDeps): Core {
 }
 
 // Production wiring from the environment. Intent check runs only when an OpenRouter key is set.
-export function createCoreFromEnv(env: Record<string, string | undefined> = process.env): Core {
+// Also returns the database, for modules beside the Core that keep their own tables (Telegram).
+export function openCoreFromEnv(env: Record<string, string | undefined> = process.env): { core: Core; db: Database } {
   const key = env.OPENROUTER_API_KEY;
   if (!key) console.warn("OPENROUTER_API_KEY not set: the LLM intent check is OFF (deterministic rules only).");
   const intentLlm = key ? openRouterIntentLlm(key, env.INTENT_MODEL ?? DEFAULT_INTENT_MODEL) : undefined;
-  return createCore({ db: openDb(env.DB_PATH ?? "firewall.db"), settler: createSettler(env.SETTLER ?? "mock"), intentLlm });
+  const db = openDb(env.DB_PATH ?? "firewall.db");
+  return { core: createCore({ db, settler: createSettler(env.SETTLER ?? "mock"), intentLlm }), db };
+}
+
+export function createCoreFromEnv(env: Record<string, string | undefined> = process.env): Core {
+  return openCoreFromEnv(env).core;
 }
