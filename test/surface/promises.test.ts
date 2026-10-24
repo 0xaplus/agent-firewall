@@ -111,6 +111,34 @@ describe("the rules", () => {
   });
 });
 
+describe("the monthly cap holds when a human approves", () => {
+  // Demo mandate: cap 2000 USDC. Four 900 USDC requests are each under the cap, so all four are held.
+  const holdFour = async () => {
+    const a = await agent();
+    const held = [];
+    for (const r of DEMO_MANDATE.allowlist) held.push(await a.pay(900, r.address));
+    expect(held.map((p) => p.verdict)).toEqual(["needs_approval", "needs_approval", "needs_approval", "needs_approval"]);
+    return held;
+  };
+  const spent = async () => (await (await human("GET", `/api/stats?mandateId=${DEMO_MANDATE.id}`)).json() as any).settledAmount;
+
+  test("approving held payments one by one never takes spend over the cap", async () => {
+    const results = [];
+    for (const p of await holdFour()) results.push(await (await human("POST", `/api/payments/${p.paymentId}/approve`)).json() as any);
+    expect(results.map((r) => r.status)).toEqual(["settled", "settled", "denied", "denied"]);
+    expect(results[2].checks.at(-1)).toMatchObject({ name: "monthly_cap", pass: false });
+    expect(results[2].checks.at(-1).reason).toBe("Approving this would exceed the monthly cap (200 USDC left of 2000 USDC). It was not paid.");
+    expect(await spent()).toBe(1800);
+  });
+
+  test("approving them all at once never takes spend over the cap either", async () => {
+    const held = await holdFour();
+    const results = await Promise.all(held.map(async (p) => (await human("POST", `/api/payments/${p.paymentId}/approve`)).json() as any));
+    expect(results.filter((r) => r.status === "settled")).toHaveLength(2);
+    expect(await spent()).toBeLessThanOrEqual(2000);
+  });
+});
+
 describe("the human decides", () => {
   test("a held payment is paid only when a human approves it", async () => {
     const a = await agent();

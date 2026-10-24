@@ -1,6 +1,6 @@
 // Payment lifecycle: the only module that changes a payment's status.
 import type { Database } from "bun:sqlite";
-import { getMandate, getPayment, insertPayment, listPayments, movePayment, type PaymentPatch } from "./db";
+import { getMandate, getPayment, insertPayment, listPayments, monthSpend, movePayment, type PaymentPatch } from "./db";
 import { verdictOf } from "./engine/risk";
 import { mandateStopped } from "./engine/rules";
 import { CoreError } from "./errors";
@@ -81,8 +81,16 @@ export async function approvePayment(deps: PaymentDeps, id: string): Promise<Pay
   // A held payment can outlive its mandate: it may expire while the payment waits, and a request
   // that passed its checks just before a revoke can land after it. Neither may move money.
   const mandate = getMandate(deps.db, p.mandateId);
-  const stopped = mandate ? mandateStopped(mandate, (deps.now ?? (() => new Date()))()) : "Mandate not found.";
-  if (stopped) return move(deps.db, p, "denied", withCheck(p, denial(`${stopped} It can no longer be approved.`)));
+  const now = (deps.now ?? (() => new Date()))();
+  const stopped = mandate ? mandateStopped(mandate, now) : "Mandate not found.";
+  if (stopped || !mandate) return move(deps.db, p, "denied", withCheck(p, denial(`${stopped} It can no longer be approved.`)));
+  // Held payments don't count toward month spend, so other approvals may have used up the cap meanwhile.
+  const spent = monthSpend(deps.db, mandate.id, now);
+  if (spent + p.amount > mandate.monthlyCap) {
+    const money = (n: number) => `${n} ${mandate.currency}`;
+    const reason = `Approving this would exceed the monthly cap (${money(Math.max(0, mandate.monthlyCap - spent))} left of ${money(mandate.monthlyCap)}). It was not paid.`;
+    return move(deps.db, p, "denied", withCheck(p, { name: "monthly_cap", pass: false, severity: "block", reason }));
+  }
   return settle(deps, move(deps.db, p, "settling"));
 }
 
