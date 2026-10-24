@@ -140,7 +140,7 @@ Rules, in code order (`src/engine/rules.ts`). A failed **block** rule blocks; a 
 
 R9 and the amount sanity check (positive, finite) are additions to the plan's R0–R8.
 
-If nothing blocked, one LLM call audits intent (5 s timeout). It treats the invoice or email as untrusted data. It can only make the outcome stricter: injection suspected → block, off-task → escalate, error or timeout or unreadable reply → escalate. With no `OPENROUTER_API_KEY` the intent check is off and a warning is logged at startup. Every request is stored, blocked ones included. Revoking a mandate stops its token and denies any payment still waiting for approval.
+If nothing blocked, one LLM call audits intent (5 s timeout). It treats the invoice or email as untrusted data. It can only make the outcome stricter: injection suspected → block, off-task → escalate, error or timeout or unreadable reply → escalate. With no `OPENROUTER_API_KEY` the intent check is off and a warning is logged at startup. Every request is stored, blocked ones included. Revoking a mandate stops its token and denies any payment still waiting for approval. Approving a held payment checks again that the mandate is still active and unexpired, and that paying it would not take this month's spend over the cap; if any of these fails, the payment is denied with the reason, not paid.
 
 ## Benchmark
 
