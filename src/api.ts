@@ -1,23 +1,7 @@
 import { z } from "zod";
 import { CoreError } from "./errors";
+import { NewMandateBody } from "./schema";
 import type { Core } from "./types";
-
-const nonEmpty = z.string().trim().min(1);
-const amount = z.number().finite().nonnegative();
-
-// Addresses are opaque strings (wallet, IBAN, account number): no format checks here.
-const NewMandateBody = z.object({
-  name: nonEmpty,
-  task: nonEmpty,
-  currency: nonEmpty,
-  autoApproveMax: amount,
-  hardMax: amount,
-  monthlyCap: amount,
-  allowlist: z.array(z.object({
-    address: nonEmpty, label: nonEmpty, category: nonEmpty, rail: nonEmpty.optional(),
-  })),
-  expiresAt: z.string().nullable(),
-});
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const fail = (status: number, error: string) => json({ error }, status);
