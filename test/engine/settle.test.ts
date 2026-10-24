@@ -118,6 +118,13 @@ describe("payfrom settler", () => {
     expect(log).toHaveLength(1);
   });
 
+  test("a refusal without PayFrom's JSON error keeps the reply, so the cause is visible", async () => {
+    const s = createPayfromSettler(deps(script([], [
+      () => new Response("<html><body><h1>403 Forbidden</h1> Request blocked by firewall</body></html>", { status: 403 }),
+    ])));
+    await expect(s.send(send("pay_1"))).rejects.toThrow(/Payfrom 403: 403 Forbidden Request blocked by firewall/);
+  });
+
   test("a transient failure (network_error) creates on the second attempt", async () => {
     const log: { url: string; init: RequestInit }[] = [];
     const s = createPayfromSettler(deps(script(log, [
@@ -161,7 +168,7 @@ describe("payfrom settler", () => {
 });
 
 describe("createSettler", () => {
-  test("defaults to mock", () => expect(createSettler().name).toBe("mock"));
+  test("defaults to mock", () => expect(env({ SETTLER: undefined }, () => createSettler().name)).toBe("mock"));
   test("payfrom without credentials refuses to boot", () =>
     expect(() => env({ SETTLER: "payfrom", PAYFROM_API_KEY: undefined, PAYFROM_WALLET_ID: undefined }, () => createSettler("payfrom")))
       .toThrow(/needs PAYFROM/));

@@ -35,6 +35,9 @@ export interface PayfromDeps {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// The start of a reply body on one line, for error messages and logs.
+const snippet = (text: string) => text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+
 export function createPayfromSettler({
   apiKey,
   walletId,
@@ -129,11 +132,17 @@ export function createPayfromSettler({
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(timeoutMs),
       });
-      const json: any = await res.json().catch(() => ({}));
+      const text = await res.text().catch(() => "");
+      let json: any = {};
+      try { json = JSON.parse(text); } catch { /* not JSON: a proxy or firewall page, say */ }
       const data = json?.success ? json.data : undefined;
-      if (!res.ok || json?.success === false)
-        return { ok: false, status: res.status, code: json?.code ?? "", error: json?.message ?? `Payfrom ${res.status}` };
-      if (data === undefined) return { ok: false, status: res.status, code: "bad_reply", error: "Payfrom reply is unreadable" };
+      if (!res.ok || json?.success === false) {
+        // Keep what came back, so a refusal from something in front of PayFrom is visible too.
+        const error = json?.message ?? `Payfrom ${res.status}: ${snippet(text) || "(empty reply)"}`;
+        console.error(`payfrom ${method} ${path} -> ${res.status} ${json?.code ?? ""}: ${snippet(text)}`);
+        return { ok: false, status: res.status, code: json?.code ?? "", error };
+      }
+      if (data === undefined) return { ok: false, status: res.status, code: "bad_reply", error: `Payfrom reply is unreadable: ${snippet(text)}` };
       return { ok: true, data };
     } catch (err) {
       return { ok: false, status: 0, code: "network_error", error: `Payfrom unreachable: ${err instanceof Error ? err.message : String(err)}` };
