@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { getMandate, getMandateByToken, getPayment, insertMandate, listPayments, monthSpend, openDb, setMandateStatus } from "./db";
+import { getMandate, getMandateByToken, getPayment, insertMandate, listMandates, listPayments, monthSpend, openDb, setMandateStatus } from "./db";
 import { evaluate, type EvalDeps } from "./engine/evaluate";
 import { verifyAudit } from "./audit";
 import { CoreError } from "./errors";
@@ -46,6 +46,7 @@ export function createCore(deps: EvalDeps): Core {
       return m;
     },
     getMandate: (id) => getMandate(db, id),
+    listMandates: () => listMandates(db),
     revokeMandate(id) {
       needMandate(id);
       setMandateStatus(db, id, "revoked");

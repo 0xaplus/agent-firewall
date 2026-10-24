@@ -138,7 +138,6 @@ describe("stats", () => {
 
 describe("routing", () => {
   test("wrong method is 405", async () => {
-    expect((await call("GET", "/api/mandates")).status).toBe(405);
     expect((await call("POST", "/api/stats")).status).toBe(405);
     expect((await call("GET", "/api/payments/pay_x/approve")).status).toBe(405);
     expect((await call("DELETE", `/api/mandates/${DEMO_MANDATE.id}`)).status).toBe(405);
@@ -205,5 +204,32 @@ describe("audit", () => {
     expect(await res.json()).toEqual({ ok: true, entries: 2 });
     expect((await call("POST", "/api/audit/verify")).status).toBe(405);
     expect((await call("GET", "/api/audit/verify", undefined, null)).status).toBe(401);
+  });
+});
+
+describe("listing agents", () => {
+  test("GET /api/mandates lists every mandate, newest first, without agent tokens", async () => {
+    const a = core.createMandate({ ...NEW_MANDATE, name: "Research subscriptions agent", currency: "USD" });
+    const b = core.createMandate({ ...NEW_MANDATE, name: "Cloud infrastructure agent", currency: "USD" });
+    const res = await call("GET", "/api/mandates");
+    expect(res.status).toBe(200);
+    const list = await res.json() as any[];
+    expect(list.map((m) => m.id)).toEqual([b.id, a.id, DEMO_MANDATE.id]);
+    for (const m of list) expect("agentToken" in m).toBe(false);
+    expect(JSON.stringify(list)).not.toContain("agt_");
+    expect(list[0]).toMatchObject({ name: "Cloud infrastructure agent", currency: "USD", status: "active", monthlyCap: NEW_MANDATE.monthlyCap });
+  });
+  test("GET /api/mandates needs the admin token; POST still creates; other methods 405", async () => {
+    expect((await call("GET", "/api/mandates", undefined, null)).status).toBe(401);
+    expect((await call("POST", "/api/mandates", NEW_MANDATE)).status).toBe(201);
+    expect((await call("DELETE", "/api/mandates")).status).toBe(405);
+  });
+  test("GET /api/mandates/:id/limits returns this month's spend; unknown is 404", async () => {
+    await pay(120);
+    const res = await call("GET", `/api/mandates/${DEMO_MANDATE.id}/limits`);
+    expect(await res.json()).toMatchObject({ currency: "USDC", monthlyCap: 2000, spentThisMonth: 120, remaining: 1880,
+      budget: { pct: 6, level: "ok", text: null } });
+    expect((await call("GET", "/api/mandates/mdt_nope/limits")).status).toBe(404);
+    expect((await call("POST", `/api/mandates/${DEMO_MANDATE.id}/limits`)).status).toBe(405);
   });
 });

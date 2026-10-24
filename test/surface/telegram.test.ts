@@ -279,3 +279,53 @@ describe("setup", () => {
     expect(lines).toEqual(["TELEGRAM_BOT_TOKEN not set: Telegram approvals are off."]);
   });
 });
+
+describe("budget alerts", () => {
+  const alerts = () => tg.of("sendMessage").map((c) => c.params.text as string).filter((t) => t.startsWith("⚠️"));
+  // Demo mandate: cap 2000 USDC. Two held payments approved: 900 + 700 = 1600, exactly 80%.
+  const spend80 = async () => {
+    for (const [amount, r] of [[900, LAGOS], [700, KANO]] as const) await core.approvePayment((await pay(amount, r!)).id);
+  };
+
+  test("one message when an agent first reaches 80% of its monthly budget, not again that month", async () => {
+    const t = telegram();
+    await t.tick();
+    expect(alerts()).toEqual([]);
+    await spend80();
+    await t.tick();
+    await t.tick();
+    expect(alerts()).toEqual(["⚠️ Ada Imports — ops agent has used 80% of its monthly budget (1,600 of 2,000 USDC)."]);
+    expect(tg.of("sendMessage").find((c) => c.params.text.startsWith("⚠️"))!.params.reply_markup).toBeUndefined();
+  });
+
+  test("not resent after a restart, sent again in a new month", async () => {
+    await spend80();
+    await telegram().tick();
+    await telegram().tick();
+    expect(alerts()).toHaveLength(1);
+    await telegram({ now: () => new Date(Date.now() + 40 * 86_400_000) }).tick();
+    expect(alerts()).toHaveLength(2);
+  });
+
+  test("below 80% nothing is sent; a failed send is retried on the next tick", async () => {
+    await core.approvePayment((await pay(900, LAGOS!)).id);
+    const t = telegram();
+    await t.tick();
+    expect(alerts()).toEqual([]);
+    await core.approvePayment((await pay(700, KANO!)).id);
+    tg.script.sendMessage = (p) => { if (p.text.startsWith("⚠️")) throw new TelegramError("Telegram sendMessage failed (502): Bad Gateway", 502); return { message_id: 1 }; };
+    await t.tick();
+    delete tg.script.sendMessage;
+    await t.tick();
+    expect(alerts()).toHaveLength(2);
+    await t.tick();
+    expect(alerts()).toHaveLength(2);
+  });
+
+  test("a revoked agent gets no alert", async () => {
+    await spend80();
+    core.revokeMandate(DEMO_MANDATE.id);
+    await telegram().tick();
+    expect(alerts()).toEqual([]);
+  });
+});

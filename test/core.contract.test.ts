@@ -4,7 +4,7 @@ import { createCore } from "../src/core.factory";
 import { openDb } from "../src/db";
 import type { IntentLlm } from "../src/engine/intent";
 import { DEMO_AGENT_TOKEN, DEMO_MANDATE } from "../src/fixtures";
-import { NAIRA_MANDATE, seedDemo, seedNaira } from "../src/seed";
+import { NAIRA_MANDATE, SEEDED, seedAll, seedDemo, seedNaira } from "../src/seed";
 import { createMockSettler } from "../src/settle/mock";
 import type { Core } from "../src/types";
 
@@ -87,6 +87,12 @@ describe("Core: human side", () => {
     const m = core.createMandate({ ...INPUT, currency: "NGN", allowlist: [{ address: "NG-0012-3456", label: "Bank A", category: "supplier" }] });
     const p = await core.requestPayment(m.id, { amount: 50, recipient: "NG-0012-3456", purpose: "x" });
     expect([p.verdict, p.status, p.currency]).toEqual(["approved", "settled", "NGN"]);
+  });
+  test("listMandates: every mandate, newest first", () => {
+    const a = core.createMandate({ ...INPUT, name: "A" });
+    const b = core.createMandate({ ...INPUT, name: "B", currency: "NGN" });
+    expect(core.listMandates().map((m) => m.id)).toEqual([b.id, a.id, DEMO_MANDATE.id]);
+    expect(core.listMandates()[0]).toEqual(b);
   });
   test("getMandate: found / null", () => {
     expect(core.getMandate(DEMO_MANDATE.id)).toEqual(DEMO_MANDATE);
@@ -174,6 +180,26 @@ describe("seed", () => {
     expect(seedDemo(fresh)).toBe(true);
     expect(seedDemo(fresh)).toBe(false);
     expect(createCore({ db: fresh, settler: createMockSettler() }).mandateForToken(DEMO_AGENT_TOKEN)?.id).toBe(DEMO_MANDATE.id);
+  });
+  test("seedAll creates the four example agents once; re-seeding is safe", () => {
+    const fresh = openDb(":memory:");
+    expect(seedAll(fresh)).toEqual([true, true, true, true]);
+    expect(seedAll(fresh)).toEqual([false, false, false, false]);
+    const c = createCore({ db: fresh, settler: createMockSettler() });
+    expect(c.listMandates().map((m) => m.id)).toEqual(["mdt_ada", "mdt_lagos", "mdt_cloud", "mdt_research"]);
+    expect(c.listMandates().map((m) => m.currency)).toEqual(["USDC", "NGN", "USD", "USD"]);
+    expect(new Set(SEEDED.map((m) => m.agentToken)).size).toBe(4);
+    for (const m of SEEDED) {
+      expect(c.mandateForToken(m.agentToken)?.id).toBe(m.id);
+      expect(m.task.length).toBeGreaterThan(20);
+      expect(m.autoApproveMax <= m.hardMax && m.hardMax <= m.monthlyCap).toBe(true);
+    }
+    expect(c.getMandate("mdt_ada")).toEqual(DEMO_MANDATE);
+  });
+  test("seedAll after the older two-mandate seed adds only what is missing", () => {
+    const fresh = openDb(":memory:");
+    seedDemo(fresh); seedNaira(fresh);
+    expect(seedAll(fresh)).toEqual([true, true, false, false]);
   });
   test("seedNaira adds a naira mandate once, alongside the USDC one, with its own token", async () => {
     const fresh = openDb(":memory:");

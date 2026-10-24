@@ -29,6 +29,10 @@ describe("dashboard page", () => {
     expect(html).toContain("/api/mandates/draft");
     expect(html).toContain("Nothing is saved until you check it and press Create mandate.");
   });
+  test("shows the budget warning text from the limits route, with a class for its level", () => {
+    expect(html).toContain("/limits`");
+    expect(html).toContain("budget ${b.level}");
+  });
   test("shows whether the audit log verifies", () => {
     expect(html).toContain('id="audit"');
     expect(html).toContain("/api/audit/verify");
